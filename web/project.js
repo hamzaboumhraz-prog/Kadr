@@ -117,6 +117,9 @@ function onSheetClick(e) {
     case 'film': closeModal(); startFilm(); break;
     case 'save': exportProjectFile(PRJ); break;
     case 'home': closeModal(); showHome(); break;
+    case 'copyPrj': if (helpBlob) helpBlob.blob.text().then(t => copyText(t)); break;
+    case 'sharePrj': if (helpBlob) navigator.share({ files: [new File([helpBlob.blob], helpBlob.name, { type: helpBlob.blob.type || 'application/octet-stream' })], title: 'كادر' }).catch(() => { }); break;
+    case 'retrySave': if (helpBlob) { closeModal(); saveBlob(helpBlob.name, helpBlob.blob); } break;
   }
 }
 function onSheetChange(e) {
@@ -142,15 +145,46 @@ function filmNext() {
 }
 
 /* ---------- saving and opening files ---------- */
+async function androidSave(name, blob) {
+  const B = window.AndroidBridge, type = /\.kadr$/i.test(name) ? 'application/octet-stream' : (blob.type || 'application/octet-stream');
+  if (!B.saveBegin) { B.saveFile(name, await blobB64(blob), type); return; }
+  const id = B.saveBegin(name, type), step = 786432;
+  for (let o = 0; o < blob.size; o += step) { if (!B.saveChunk(id, await blobB64(blob.slice(o, o + step)))) { B.saveEnd(id); throw new Error('انقطعت الكتابة في ذاكرة الهاتف'); } }
+  const err = B.saveEnd(id); if (err) throw new Error(err);
+}
+const SAVE_WHY = {
+  host_unavailable: 'تطبيق Claude على هذا الهاتف لا يسمح بحفظ الملفات من داخل الصفحة.',
+  unavailable: 'الحفظ غير متاح في هذا العرض.', not_granted: 'الحفظ غير متاح في هذا العرض.', capability_disabled: 'الحفظ غير متاح في هذا العرض.', capability_removed: 'الحفظ غير متاح في هذا العرض.',
+  too_large: 'الملف أكبر مما يقبله هذا العرض.', rejected_extension: 'هذا العرض لا يقبل هذا النوع من الملفات.', extension_not_enabled: 'هذا العرض لا يقبل هذا النوع من الملفات.'
+};
 async function saveBlob(name, blob) {
-  if (window.AndroidBridge && AndroidBridge.saveFile) { try { AndroidBridge.saveFile(name, await blobB64(blob), blob.type || 'application/octet-stream'); } catch (e) { toast('تعذّر الحفظ'); } return; }
-  if (EXP.dl) {
-    try { await EXP.dl.save({ filename: name, data: blob }); toast('حُفظ الملف'); }
-    catch (e) { const c = e && e.code; toast(c === 'declined' ? 'لم يُحفظ الملف' : c === 'host_unavailable' ? 'افتح التطبيق في متصفح أو على حاسوب لحفظ الملف' : 'تعذّر الحفظ هنا'); }
+  if (window.AndroidBridge && AndroidBridge.saveFile) {
+    try { await androidSave(name, blob); } catch (e) { saveHelp(name, blob, 'تعذّر الحفظ في الهاتف: ' + (e && e.message || e)); }
     return;
   }
-  if (inFrame()) { toast('الحفظ غير متاح في هذا العرض: افتح النسخة المستقلة من التطبيق'); return; }
+  if (EXP.dl) {
+    const fname = /\.kadr$/i.test(name) ? name + '.json' : name;
+    try { await EXP.dl.save({ filename: fname, data: blob }); toast('حُفظ الملف'); }
+    catch (e) {
+      const c = e && e.code;
+      if (c === 'declined') toast('لم يُحفظ الملف');
+      else if (c === 'rate_limited') toast('نافذة الحفظ مفتوحة أو المحاولات كثيرة: انتظر لحظة ثم أعد المحاولة');
+      else saveHelp(name, blob, SAVE_WHY[c] || 'تعذّر الحفظ هنا' + (c ? ` (${c})` : ''));
+    }
+    return;
+  }
+  if (inFrame()) { saveHelp(name, blob, 'الحفظ غير متاح داخل هذا الإطار.'); return; }
   const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); toast('بدأ تحميل الملف');
+}
+let helpBlob = null;
+function saveHelp(name, blob, why) {
+  helpBlob = { name, blob };
+  const isPrj = /\.kadr$/i.test(name), canShare = !inFrame() && navigator.canShare && navigator.canShare({ files: [new File([blob], name, { type: blob.type || 'application/octet-stream' })] });
+  openModal('تعذّر الحفظ', `<p>${esc(why)}</p>
+  <div class="card"><b>الحل</b>
+  <p>${window.AndroidBridge ? 'أعد المحاولة بعد إغلاق التطبيقات الأخرى. إن تكرر الخطأ، صدّر بدقة 720p أو احفظ المشروع كملف ثم صدّره من الحاسوب.' : 'افتح كادر من تطبيق الأندرويد المثبَّت (APK) أو من رابط الويب في المتصفح، فالحفظ هناك يعمل دائمًا.'}</p>
+  ${isPrj ? '<p>أو انسخ نص المشروع هنا، ثم في الجهاز الآخر: «افتح ملف سيناريو» ← «الصق نص الملف».</p>' : ''}</div>
+  <div class="btns" style="margin-top:12px">${isPrj ? `<button class="btn pri" data-pa="copyPrj">${IC.copy} انسخ نص المشروع</button>` : ''}${canShare ? `<button class="btn" data-pa="sharePrj">مشاركة الملف</button>` : ''}<button class="btn" data-pa="retrySave">${IC.dl} أعد المحاولة</button></div>`);
 }
 function fileSafe(n) { return String(n || 'kadr').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) || 'kadr'; }
 function exportProjectFile(P) {

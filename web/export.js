@@ -133,17 +133,7 @@ async function renderVideo(onP) {
 }
 function blobB64(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(b); }); }
 function expName() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${PRJ ? fileSafe(PRJ.name).replace(/\s+/g, '-') : 'kadr'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${EXP.ext}`; }
-async function expSave() {
-  if (!EXP.blob) return; const name = expName();
-  if (window.AndroidBridge && AndroidBridge.saveFile) { try { AndroidBridge.saveFile(name, await blobB64(EXP.blob), EXP.blob.type); } catch (e) { toast('تعذّر الحفظ'); } return; }
-  if (EXP.dl) {
-    try { await EXP.dl.save({ filename: name, data: EXP.blob }); toast('حُفظ الفيديو'); }
-    catch (e) { const c = e && e.code; toast(c === 'declined' ? 'لم يُحفظ الملف' : c === 'host_unavailable' ? 'افتح الرابط في متصفح أو على حاسوب لحفظ الفيديو' : c === 'rate_limited' ? 'انتظر لحظة ثم أعد المحاولة' : 'تعذّر الحفظ هنا'); }
-    return;
-  }
-  if (inFrame()) { toast('الحفظ غير متاح في هذا العرض: افتح النسخة المستقلة من التطبيق'); return; }
-  const a = document.createElement('a'); a.href = EXP.url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); toast('بدأ تحميل الفيديو');
-}
+async function expSave() { if (EXP.blob) await saveBlob(expName(), EXP.blob); }
 async function expShare() {
   try { await navigator.share({ files: [new File([EXP.blob], expName(), { type: EXP.blob.type })], title: 'كادر' }); } catch (e) { if (e && e.name !== 'AbortError') toast('تعذّرت المشاركة'); }
 }
