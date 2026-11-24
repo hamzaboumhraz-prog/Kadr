@@ -65,7 +65,7 @@ function onResize() {
 function disposeObj(r) {
   const keep = new Set(MC.values());
   r.traverse(m => {
-    if (m.geometry) m.geometry.dispose();
+    if (m.geometry) m.geometry.dispose(); if (m.userData && m.userData.rt) m.userData.rt.dispose();
     (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => { if (!x) return; if (x.map) x.map.dispose(); if (!keep.has(x)) x.dispose(); });
   });
 }
@@ -119,24 +119,37 @@ function syncItems() {
   RT.dirty = true;
 }
 function blendPose(a, b, t) { for (const k in b) a[k] = lerp(a[k] || 0, b[k], t); }
-function evalItem(s, t) {
-  const st = { x: s.x, z: s.z, rot: (s.rot || 0) * D2R, pose: Object.assign({}, POSES[s.pose] || POSES.stand), gait: 0, gA: 0, run: 0, wave: 0, waveT: 0, hold: POSE_HOLD[s.pose] || null, moving: false, jumpY: 0, crouch: 0, talk: 0, laugh: 0, nod: 0, shakeH: 0, clap: 0, gest: 0, dance: 0, bend: 0, gazeX: 0, gazeY: 0, fx: 0 };
+const wrapA = a => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+function evalItem(s, t, shallow) {
+  const st = { x: s.x, z: s.z, rot: (s.rot || 0) * D2R, pose: Object.assign({}, POSES[s.pose] || POSES.stand), gait: 0, gA: 0, run: 0, wave: 0, waveT: 0, hold: POSE_HOLD[s.pose] || null, moving: false, jumpY: 0, crouch: 0, talk: 0, laugh: 0, nod: 0, shakeH: 0, clap: 0, gest: 0, dance: 0, bend: 0, gazeX: 0, gazeY: 0, fx: 0, dress: 0, asit: s.pose === 'sit' ? 1 : 0, alie: s.pose === 'lie' ? 1 : 0 };
+  const animal = s.kind === 'animal';
   const env = p => Math.max(0, Math.min(1, p * 6, (1 - p) * 6));
   const acts = (s.actions || []).slice().sort((a, b) => a.t - b.t);
   for (const a of acts) {
     if (t < a.t) break;
     const dur = Math.max(.05, a.dur || 1), el = t - a.t, p = clamp(el / dur, 0, 1), e = smooth(p);
     if (p < 1) st.moving = true;
+    if (animal && (a.type === 'sit' || a.type === 'lie' || a.type === 'stand')) { st.asit = lerp(st.asit, a.type === 'sit' ? 1 : 0, e); st.alie = lerp(st.alie, a.type === 'lie' ? 1 : 0, e); continue; }
     switch (a.type) {
       case 'walk': case 'run': {
         const sx = st.x, sz = st.z, tx = a.tx == null ? sx : a.tx, tz = a.tz == null ? sz : a.tz, dx = tx - sx, dz = tz - sz, dist = Math.hypot(dx, dz);
         st.x = sx + dx * p; st.z = sz + dz * p;
-        if (dist > .02) st.rot = lerpAng(st.rot, Math.atan2(dx, dz), clamp(el / .35, 0, 1));
+        if (animal && p < 1) { st.asit *= 1 - clamp(el / .3, 0, 1); st.alie *= 1 - clamp(el / .3, 0, 1); }
+        if (dist > .02 && !a.back) st.rot = lerpAng(st.rot, Math.atan2(dx, dz), clamp(el / .35, 0, 1));
         if (p < 1) { st.gait = dist * p; st.gA = clamp(Math.min(el, dur - el) * 3, 0, 1); st.run = a.type === 'run' ? 1 : 0; }
         break;
       }
       case 'turn': st.rot += (a.v == null ? 90 : a.v) * D2R * e; break;
       case 'look': st.pose.neckY = lerp(st.pose.neckY, (a.v == null ? 60 : a.v) * D2R, e); break;
+      case 'watch': {
+        const T = !shallow && a.to && itemById(a.to); if (!T || p >= 1) break;
+        const ts = evalItem(T, t, true), k = smooth(clamp(Math.min(el, dur - el) / .35, 0, 1));
+        let d = wrapA(Math.atan2(ts.x - st.x, ts.z - st.z) - st.rot); const lim = 1.25;
+        if (Math.abs(d) > lim && !st.moving) { const extra = (Math.abs(d) - lim) * Math.sign(d); st.rot += extra * k; d -= extra; }
+        if (Math.abs(d) > lim) d = Math.sign(d) * lim;
+        st.pose.neckY = lerp(st.pose.neckY, d, k); st.gazeX = lerp(st.gazeX, clamp(-d * .6, -1, 1) * .4, k); break;
+      }
+      case 'dress': if (p < 1) { st.dress = env(p); st.dressP = p; st.fx = el; } break;
       case 'wave': if (p < 1) { st.wave = Math.pow(Math.sin(Math.PI * p), .3); st.waveT = el; } break;
       case 'jump': if (p < 1) { const q = clamp((p - .15) / .7, 0, 1); st.jumpY = Math.sin(Math.PI * q) * .45; st.crouch = Math.max(0, 1 - p / .15) * (p < .15 ? Math.sin(Math.PI * p / .15) : 0) + (p > .85 ? Math.sin(Math.PI * (p - .85) / .15) : 0); } break;
       case 'talk': if (p < 1) { st.talk = Math.max(st.talk, env(p)); st.fx = el; } break;
@@ -191,16 +204,22 @@ function poseHuman(o, st, t) {
     if (st.run) { P.spine += .2 * st.gA; P.lEl += 1.2 * st.gA; P.rEl += 1.2 * st.gA; }
   }
   if (st.wave > 0) { const w = st.wave; P.rShZ = lerp(P.rShZ, 2.6, w); P.rShX = lerp(P.rShX, .1, w); P.rEl = lerp(P.rEl, .45, w) + Math.sin(st.waveT * 11) * .45 * w; }
+  if (st.dress > 0) { const d = st.dress, q = st.dressP || 0, a1 = Math.sin(Math.PI * clamp(q / .5, 0, 1)), a2 = Math.sin(Math.PI * clamp((q - .4) / .5, 0, 1));
+    P.lShX = lerp(P.lShX, -.55, a1 * d); P.lShZ = lerp(P.lShZ, .55, a1 * d); P.lEl = lerp(P.lEl, .35, a1 * d);
+    P.rShX = lerp(P.rShX, -.55, a2 * d); P.rShZ = lerp(P.rShZ, .55, a2 * d); P.rEl = lerp(P.rEl, .35, a2 * d);
+    P.spine += .08 * Math.sin(st.fx * 5) * d; P.neckX += .12 * d; }
   setPose(o, P);
-  o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone';
+  o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone'; if (o.hold.tphone) o.hold.tphone.visible = st.hold === 'tphone';
   const bl = st.hold === 'binoc' ? 0 : blinkAt(t, o.seed), open = Math.max(st.talk * (.5 + .5 * Math.sin(st.fx * 15)) * (.55 + .45 * Math.sin(st.fx * 5.3 + 1)), st.laugh * (.65 + .2 * Math.sin(st.fx * 18)), st.hold === null && P.lShX > 2 ? .5 : 0, st.dance * .35);
   r.eyes.forEach(e => { e.g.scale.y = 1 - .92 * bl; e.p.position.x = st.gazeX * r.r * .055; e.p.position.y = st.gazeY * r.r * .05; });
   r.mouth.scale.y = .2 + open * .85; r.mouth.scale.x = 1.25 + st.laugh * .25;
   const browUp = (P.lShX > 2 ? .07 : 0) + st.laugh * .03; r.brows.forEach(b => { b.position.y = r.r * 1.33 + browUp * r.r; });
 }
 function poseAnimal(o, st, t) {
-  const r = o.rig, A = st.gA * (st.run ? 1.4 : 1), ph = st.gait / Math.max(.12, r.A.leg * 2.2) * TAU;
-  r.legs.forEach((l, i) => { const off = (i === 0 || i === 3) ? 0 : Math.PI; l.rotation.x = Math.sin(ph + off) * .55 * A + (st.jumpY > 0 ? (i < 2 ? -.6 : .6) * Math.min(1, st.jumpY * 3) : 0); });
+  const r = o.rig, A = st.gA * (st.run ? 1.4 : 1), ph = st.gait / Math.max(.12, r.A.leg * 2.2) * TAU, lie = st.alie || 0, sit = st.asit || 0, four = r.legs.length === 4;
+  r.legs.forEach((l, i) => { const off = (i === 0 || i === 3) ? 0 : Math.PI, front = i < 2; l.rotation.x = Math.sin(ph + off) * .55 * A + (st.jumpY > 0 ? (front ? -.6 : .6) * Math.min(1, st.jumpY * 3) : 0) + (four ? (front ? -1.45 : 1.45) * lie + (front ? .5 : -.95) * sit : 0); });
+  o.root.rotation.order = 'YXZ'; o.root.rotation.x = four ? -.5 * sit : 0; o.root.position.y += -(r.A.leg || .1) * (.82 * lie + .3 * sit);
+  if (r.neck && r.A.nx != null) { r.neck.rotation.order = 'YXZ'; r.neck.rotation.x = r.A.nx + .55 * lie + .3 * sit; }
   if (o.type === 'bird') r.body.position.y = .17 + Math.abs(Math.sin(ph)) * .05 * A;
   if (r.tail) r.tail.rotation.z = Math.sin(t * (st.gA > 0 ? 14 : 4)) * (o.type === 'horse' ? .15 : .35);
   r.neck.rotation.y = st.pose.neckY;
@@ -243,9 +262,9 @@ function frameSpan(L, k) {
     case 'MLS': b = L.knee.y - .03 * H; t = T + .06 * H; w = .6; break;
     case 'MS': b = L.hip.y + .07 * H; t = T + .06 * H; w = .75; break;
     case 'MCU': b = L.chest.y - .03 * H; t = T + .05 * H; w = .9; break;
-    case 'CU': b = L.chin.y - hh * .55; t = T + hh * .12; break;
-    case 'BCU': b = L.chin.y - hh * .06; t = L.eye.y + hh * .3; break;
-    case 'ECU': b = L.eye.y - hh * .17; t = L.eye.y + hh * .17; break;
+    case 'CU': b = L.chin.y - hh * .55; t = T + hh * .12; pt = L.top.clone().lerp(L.eye, .35); break;
+    case 'BCU': b = L.chin.y - hh * .06; t = L.eye.y + hh * .3; pt = L.top.clone().lerp(L.eye, .5); break;
+    case 'ECU': b = L.eye.y - hh * .17; t = L.eye.y + hh * .17; pt = L.top.clone().lerp(L.eye, .8); break;
     case 'INS': { const s = Math.max(.07, H * .09); b = L.hand.y - s; t = L.hand.y + s; pt = L.hand; break; }
     default: b = f; t = T;
   }
@@ -284,9 +303,12 @@ function applyMove(R, c, p, tn) {
     case 'roll': R.roll += dir * amt * .5 * q; break;
   }
 }
+function lookPoint(id, t) { const L = lmOf(id, t); if (!L) return null; return L.human ? L.eye.clone().lerp(L.chin, .3) : V3(L.base.x, L.foot + L.H * .6, L.base.z); }
 function computeFree(cfg, p, tn) {
-  const asp = aspV(), fv = lensFov(cfg.lens || 35, asp), yaw = (cfg.yaw || 0) * D2R, pit = clamp(cfg.pitch || 0, -89, 89) * D2R;
-  const f = V3(Math.sin(yaw) * Math.cos(pit), Math.sin(pit), Math.cos(yaw) * Math.cos(pit)), P = V3(cfg.px || 0, cfg.py == null ? 1.5 : cfg.py, cfg.pz || 0), D = cfg.fd || 4;
+  const asp = aspV(), fv = lensFov(cfg.lens || 35, asp); let yaw = (cfg.yaw || 0) * D2R, pit = clamp(cfg.pitch || 0, -89, 89) * D2R;
+  const P = V3(cfg.px || 0, cfg.py == null ? 1.5 : cfg.py, cfg.pz || 0); let D = cfg.fd || 4;
+  if (cfg.look) { const Q = lookPoint(cfg.look, tn); if (Q) { const v = Q.sub(P), h = Math.hypot(v.x, v.z); if (v.length() > .05) { yaw = Math.atan2(v.x, v.z); pit = Math.atan2(v.y, h); D = clamp(v.length(), .3, 60); } } }
+  const f = V3(Math.sin(yaw) * Math.cos(pit), Math.sin(pit), Math.cos(yaw) * Math.cos(pit));
   const R = { asp, hf: fv.hf, vf: fv.vf, yaw: 0, pitch: 0, lat: 0, vert: 0, roll: (cfg.roll || 0) * D2R, tY: 0, whip: 0, c: P.clone().addScaledVector(f, D), d: D, a: Math.atan2(-f.x, -f.z), e: Math.asin(clamp(-f.y, -1, 1)), place: 'c', m: 'free' };
   applyMove(R, cfg, p, tn); if (cfg.shake) shakeR(R, tn + 3.7, cfg.shake); R.f = focalOf(R); return R;
 }
@@ -298,10 +320,30 @@ function freezeCam(c) {
 }
 function aimCam(c, P) { const dx = P.x - (c.px || 0), dy = P.y - (c.py == null ? 1.5 : c.py), dz = P.z - (c.pz || 0), h = Math.hypot(dx, dz); c.yaw = Math.round(Math.atan2(dx, dz) / D2R); c.pitch = Math.round(Math.atan2(dy, h) / D2R); c.fd = +clamp(Math.hypot(h, dy), 1, 30).toFixed(1); }
 function aimPoint(id) { const L = lmOf(id, RT.t); if (!L) return null; return L.human ? L.eye.clone() : V3(L.base.x, L.foot + L.H * .6, L.base.z); }
+function camFollow(cfg) { return cfg.move === 'track' ? 'move' : (cfg.follow || 'pan'); }
 function computeCam(cfg, p, tb, tn) {
   if (!cfg) return null;
   if (cfg.mode === 'free') return computeFree(cfg, p, tn);
-  const asp = aspV(), mv = cfg.move || 'static', tS = mv === 'track' ? tn : tb;
+  const fol = camFollow(cfg); let R;
+  if (fol === 'move') R = baseCam(cfg, tn);
+  else if (fol === 'off' || Math.abs(tn - tb) < 1e-4) R = baseCam(cfg, tb);
+  else {
+    const R0 = baseCam(cfg, tb), R1 = R0 && baseCam(cfg, tn);
+    if (!R0 || !R1) R = R0 || R1;
+    else {
+      const ce = Math.cos(R0.e), P0 = R0.c.clone().addScaledVector(V3(Math.sin(R0.a) * ce, Math.sin(R0.e), Math.cos(R0.a) * ce), R0.d);
+      const v = P0.sub(R1.c), d = Math.max(.25, v.length());
+      R = R1; R.d = d; R.a = Math.atan2(v.x, v.z); R.e = Math.asin(clamp(v.y / d, -1, 1)); R.vf = R0.vf; R.hf = R0.hf;
+    }
+  }
+  if (!R) return null;
+  applyMove(R, cfg, p, tn);
+  if (cfg.shake) shakeR(R, tn + 3.7, cfg.shake);
+  R.f = focalOf(R);
+  return R;
+}
+function baseCam(cfg, tS) {
+  const asp = aspV();
   const S = lmOf(cfg.target, tS); if (!S) return null;
   const ang = ANG[cfg.angle || 'eye'] || ANG.eye;
   const R = { asp, yaw: 0, pitch: 0, lat: 0, vert: 0, roll: ((ang.roll || 0) + (cfg.roll || 0)) * D2R, tY: 0, whip: 0 };
@@ -346,9 +388,7 @@ function computeCam(cfg, p, tb, tn) {
   }
   const th = Math.atan(Math.tan(R.hf / 2) / 3) * (m === 'ots' ? .7 : 1);
   R.tY = place === 'l' ? -th : place === 'r' ? th : 0; R.place = place;
-  applyMove(R, cfg, p, tn);
-  if (cfg.shake) shakeR(R, tn + 3.7, cfg.shake);
-  R.f = focalOf(R); R.m = m; R.S = S;
+  R.m = m; R.S = S;
   return R;
 }
 function composeCam(cam, R) {
@@ -500,6 +540,7 @@ function transAt(T) {
     else { const k = (T - (C - w)) / (2 * w); const oth = T < C ? { c: camById(ST.shots[j].cam), p: 0, tb: C } : { c: camById(ST.shots[j - 1].cam), p: 1, tb: st[j - 1] }; if (oth.c) { out.R2 = computeCam(oth.c, oth.p, oth.tb, T); out.mixA = T < C ? k : 1 - k; } }
   }
   if (ST.shots[0] && ST.shots[0].trans === 'fade' && T < .5) out.fadeA = Math.max(out.fadeA, 1 - T / .5);
+  ST.shots.forEach((sh, j) => { if (sh.end !== 'fade') return; const e = st[j] + sh.dur, w = Math.min(1.2, sh.dur * .5); if (T > e - w && (T <= e || j === ST.shots.length - 1)) out.fadeA = Math.max(out.fadeA, clamp((T - (e - w)) / w, 0, 1)); });
   return out;
 }
 function programFrame(t) {

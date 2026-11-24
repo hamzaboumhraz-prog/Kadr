@@ -276,6 +276,45 @@ body.stage.camstrip .shotlbl{bottom:136px}
 body.stage .toast{bottom:150px}
 body.stage .srcbar{display:none!important}
 @media (max-width:640px){.sui .stc,.sui .seg span,.sui .add span,.sui .st-cam b{display:none}.sui .st-bot{gap:5px;padding:5px;flex-wrap:wrap}.sui .scams{order:-1;flex-basis:100%;max-width:none}.sui .st-cam{bottom:122px}body.stage .shotlbl,body.stage.camstrip .shotlbl{bottom:10px}body.stage .toast{bottom:200px}}
+
+/* projects, scenes, home */
+.scbtn{display:flex;flex-direction:column;align-items:flex-start;gap:0;min-height:44px;padding:4px 12px 4px 30px;border-radius:10px;border:1px solid var(--line);background:var(--pan);text-align:start;position:relative;max-width:min(52vw,420px);min-width:0}
+.scbtn b{font:700 16px/1.25 "Noto Kufi Arabic",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.scbtn small{font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.scbtn svg{position:absolute;left:8px;top:50%;width:16px;height:16px;transform:translateY(-50%);color:var(--mut)}
+.scbtn:hover{background:var(--pan2)}
+.brand{min-width:0}.homebtn{border:0;background:transparent;padding:0;display:flex;border-radius:10px}.homebtn:focus-visible{outline:2px solid var(--amb)}
+.pname{display:grid;gap:4px;margin-bottom:12px}.pname span{font-size:13px;color:var(--mut)}
+.pname input,.scn-b input,.hc-menu input,#hPaste{width:100%;min-height:42px;border-radius:10px;border:1px solid var(--line);background:#1a0c0a;color:var(--ink);padding:6px 10px;font:inherit}
+#hPaste{min-height:140px;font:13px/1.45 ui-monospace,monospace;direction:ltr;text-align:left}
+.scl{display:flex;flex-direction:column;gap:8px}
+.scn{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;padding:8px;border:1px solid var(--line);border-radius:12px;background:#1a0c0a}
+.scn.on{border-color:var(--amb);box-shadow:inset 0 0 0 1px var(--amb)}
+.scn-go{grid-row:span 2;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:transparent;padding:2px}
+.scn-go .num{min-width:34px;height:34px;border-radius:9px;background:var(--pan2);display:grid;place-items:center;font-weight:700}
+.scn.on .scn-go .num{background:var(--amb);color:#1c0e0c}
+.scn-go .sw{width:34px;height:20px;border-radius:5px}
+.scn-b{display:flex;flex-direction:column;gap:3px;min-width:0}.scn-b small{color:var(--mut);font-size:12.5px}
+.scn-t{grid-column:2;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.home{position:fixed;inset:0;z-index:300;background:radial-gradient(circle at 80% -10%,#3a1c16,transparent 55%),var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.hwrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+.hhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}.hhead .logo{width:48px;height:48px}
+.hhead h1{font:800 30px/1.1 "Noto Kufi Arabic",sans-serif;margin:0}.hhead p{margin:2px 0 0;color:var(--mut);font-size:14px}.hhead>div{flex:1;min-width:180px}
+.hact{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:8px}
+.hbig{display:flex;align-items:center;gap:12px;text-align:start;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--pan);min-height:76px}
+.hbig svg{width:28px;height:28px;flex:none}.hbig span{display:flex;flex-direction:column;gap:2px}.hbig b{font:700 17px "Noto Kufi Arabic",sans-serif}.hbig small{color:var(--mut);font-size:13px}
+.hbig.pri{background:var(--amb);border-color:var(--amb);color:#1c0e0c}.hbig.pri small{color:#4a2a14}
+.hbig:hover{filter:brightness(1.07)}
+.hsec{margin-top:18px}.hsec h2{font:700 18px "Noto Kufi Arabic",sans-serif;margin:0 0 10px}.hsec h3{font-size:15px;margin:14px 0 8px}
+.hcard{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:14px;background:#1a0c0a;margin-bottom:8px}
+.hc-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;border:0;background:transparent;text-align:start;padding:4px;min-height:52px}
+.hc-sw{width:54px;height:40px;border-radius:9px;flex:none;border:1px solid #00000040}
+.hc-t{display:flex;flex-direction:column;min-width:0}.hc-t b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hc-t small{color:var(--mut);font-size:12.5px}
+.hc-menu{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 4px 2px;border-top:1px solid var(--line)}
+.hc-menu input{flex:1;min-width:160px}
+body.homeon #app{visibility:hidden}
+@media (max-width:899px){.scbtn{max-width:calc(100vw - 230px)}.scbtn b{font-size:14.5px}.scbtn small{font-size:11.5px}}
+@media (max-width:420px){.top .hb .ib#bBoard{display:none}}
 @media (max-width:1100px){#app{grid-template-columns:350px minmax(0,1fr)}}
 @media (max-width:899px){
   #app{display:block;height:auto}
@@ -304,8 +343,8 @@ body.stage .srcbar{display:none!important}
 <div id="app">
   <header class="top">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="7" width="36" height="26" rx="5" fill="#f2a23a"/><rect x="6" y="11" width="28" height="18" rx="2" fill="#1c0e0c"/><path d="M6 17v-6h6M34 17v-6h-6M6 23v6h6M34 23v6h-6" stroke="#f2a23a" stroke-width="2" fill="none"/><circle cx="20" cy="20" r="3.2" fill="#ef7f37"/></svg>
-      <div><h1>كادر</h1><p>مختبر اللغة السينمائية: ابنِ المشهد، ضع الكاميرا، ركّب</p></div>
+      <button class="homebtn" id="bHome" aria-label="كل المشاريع" title="كل المشاريع"><svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="7" width="36" height="26" rx="5" fill="#f2a23a"/><rect x="6" y="11" width="28" height="18" rx="2" fill="#1c0e0c"/><path d="M6 17v-6h6M34 17v-6h-6M6 23v6h6M34 23v6h-6" stroke="#f2a23a" stroke-width="2" fill="none"/><circle cx="20" cy="20" r="3.2" fill="#ef7f37"/></svg></button>
+      <button class="scbtn" id="bScenes" aria-label="المشاهد"></button>
     </div>
     <div class="hb">
       <button class="ib" id="bUndo" title="تراجع" aria-label="تراجع"></button>
@@ -351,6 +390,8 @@ body.stage .srcbar{display:none!important}
 </div>
 <div class="modal" id="modal" hidden><div class="mbox" role="dialog" aria-modal="true"><div class="mhead"><h2 id="mt"></h2><button class="btn" id="mx">إغلاق</button></div><div class="mbody" id="mb"></div></div></div>
 <div class="pop" id="pop" hidden></div>
+<div class="home" id="home" hidden></div>
+<input type="file" id="fileIn" hidden>
 <div class="toast" id="toast" role="status"></div>
 <script src="lib/three.min.js"></script>
 <script src="lib/mp4-muxer.js"></script>
@@ -360,6 +401,8 @@ body.stage .srcbar{display:none!important}
 <script src="ui.js"></script>
 <script src="tl.js"></script>
 <script src="export.js"></script>
+<script src="project.js"></script>
+<script src="script.js"></script>
 <script>boot();</script>
 </body>
 </html>

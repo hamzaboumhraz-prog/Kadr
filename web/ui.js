@@ -12,7 +12,7 @@ const IC = {
   cine: sv('<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>'),
   board: sv('<rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/>'),
   plus: sv('<path d="M12 5v14M5 12h14"/>'), copy: sv('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
-  trash: sv('<path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/>'), up: sv('<path d="M6 15l6-6 6 6"/>'), down: sv('<path d="M6 9l6 6 6-6"/>'),
+  trash: sv('<path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/>'), up: sv('<path d="M6 15l6-6 6 6"/>'), home: sv('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'), file: sv('<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/>'), more: sv('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>', 1), scenes: sv('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M14 4v5"/>'), down: sv('<path d="M6 9l6 6 6-6"/>'),
   pin: sv('<path d="M12 22s7-7.5 7-13a7 7 0 0 0-14 0c0 5.5 7 13 7 13z"/><circle cx="12" cy="9" r="2.5"/>'),
   img: sv('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>'),
   tScene: sv('<path d="M3 20l6-9 4 6 3-4 5 7z"/><circle cx="17" cy="6" r="2"/>'),
@@ -36,7 +36,7 @@ const FLAG_INFO = {
   same: { c: 'info', i: '=', s: '', t: 'الكاميرا نفسها', d: 'لا يوجد قطع حقيقي: اللقطتان من الكاميرا نفسها.' },
   plain: { c: 'info', i: '·', s: '', t: 'قطع عادي', d: 'لا مشكلة واضحة. اسأل نفسك: ما الذي يجب أن يراه المشاهد الآن؟' }
 };
-const ENV_SW = { studio: 'linear-gradient(#a3a09c,#6e6b68)', room: 'linear-gradient(#d9c6aa 58%,#8f6541 58%)', house: 'linear-gradient(#efe7da 52%,#2f7a64 52% 68%,#2b4f8a 68%)', classroom: 'linear-gradient(#efe6cf 40%,#2e4a3c 40% 72%,#cfc6b2 72%)', street: 'linear-gradient(#c9dced 36%,#e2c9a0 36% 74%,#4a4b4f 74%)', medina: 'linear-gradient(#e8a578 40%,#c47f4b 40% 80%,#d2ae80 80%)', park: 'linear-gradient(#c9dced 42%,#5f8a3a 42%)', desert: 'linear-gradient(#e8a578 48%,#ddb27a 48%)' };
+const ENV_SW = { studio: 'linear-gradient(#a3a09c,#6e6b68)', room: 'linear-gradient(#d9c6aa 58%,#8f6541 58%)', house: 'linear-gradient(#efe7da 52%,#2f7a64 52% 68%,#2b4f8a 68%)', classroom: 'linear-gradient(#efe6cf 40%,#2e4a3c 40% 72%,#cfc6b2 72%)', street: 'linear-gradient(#c9dced 36%,#e2c9a0 36% 74%,#4a4b4f 74%)', medina: 'linear-gradient(#e8a578 40%,#c47f4b 40% 80%,#d2ae80 80%)', park: 'linear-gradient(#c9dced 42%,#5f8a3a 42%)', desert: 'linear-gradient(#e8a578 48%,#ddb27a 48%)', cafe: 'linear-gradient(#efe7da 45%,#b5523b 45% 58%,#cbbfa9 58%)', alley: 'linear-gradient(90deg,#6f9fd6 30%,#cfc6b2 30% 70%,#8fb5e4 70%)', beach: 'linear-gradient(#c9dced 30%,#2f7fa8 30% 55%,#e3c999 55%)', rooftop: 'linear-gradient(#e8a578 50%,#c97a52 50%)', village: 'linear-gradient(#c9dced 40%,#c9a46b 40% 62%,#b48d5c 62%)', souk: 'linear-gradient(#c9dced 34%,#b5523b 34% 50%,#d2b385 50%)', road: 'linear-gradient(#c9dced 38%,#8fae5a 38% 56%,#4a4b4f 56%)' };
 const KEY = 'kadr-project-v1';
 const HIST = { s: [], i: -1 };
 let TAB = 'learn', PPS = 50;
@@ -81,7 +81,7 @@ function lessonState(k) {
   const S = { v: 1, seq: 1, env: L.env, light: L.light, aspect: L.aspect, items: [], cams: [], shots: [], bd: null, ov: { thirds: 1, safe: 0, lbl: 1 }, lesson: L.k };
   const prev = ST; ST = S; const idx = [];
   L.items.forEach(([type, x, z, rot, ex]) => { const s = newItemSpec(type, x, z, rot); Object.assign(s, JSON.parse(JSON.stringify(ex || {}))); s.id = nid('i'); s.actions = (s.actions || []).map(a => Object.assign({}, a)); S.items.push(s); idx.push(s.id); });
-  L.cams.forEach((c, i) => S.cams.push(newCam(Object.assign({}, c, { target: idx[c.target], other: c.other != null ? idx[c.other] : null }), i)));
+  L.cams.forEach((c, i) => S.cams.push(newCam(Object.assign({ follow: 'off' }, c, { target: idx[c.target], other: c.other != null ? idx[c.other] : null }), i)));
   L.shots.forEach(([ci, d]) => S.shots.push({ id: nid('s'), cam: S.cams[ci].id, dur: d, trans: 'cut' }));
   ST = prev; return S;
 }
@@ -100,8 +100,6 @@ function normalize(S) {
 }
 
 /* ---------- history & persistence ---------- */
-function save() { try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (e) { } }
-function loadSaved() { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 let lastLight = null;
 function refreshWorld() {
   syncEnv(); syncItems(); const lk = ST.light + ST.env + (ST.weather || ''); if (lastLight !== lk) { applyLight(); lastLight = lk; }
@@ -151,7 +149,7 @@ function pScene() {
   <div class="btns"><label class="btn">${IC.img} اختر صورة<input type="file" id="bdFile" accept="image/*" hidden></label>${RT.bdImg ? `<button class="btn danger" data-act="bdDel">إزالة الخلفية</button>` : ''}</div>
   ${RT.bdImg && ST.bd ? `<div class="row"><span>الوضع</span><div class="chips">${chip('خلف الهدف دائمًا', ST.bd.follow, 'data-act="bdMode" data-v="1"')}${chip('ثابتة في المكان', !ST.bd.follow, 'data-act="bdMode" data-v="0"')}</div></div>${rng('المسافة', 'dist', 2, 60, 1, ST.bd.dist, 'bd')}${!ST.bd.follow ? rng('الارتفاع', 'size', 3, 40, 1, ST.bd.size, 'bd') : ''}` : ''}</section>
   <section><h3>أدوات الكادر</h3><div class="chips">${chip('شبكة الأثلاث', ST.ov.thirds, 'data-act="ov" data-v="thirds"')}${chip('الهامش الآمن', ST.ov.safe, 'data-act="ov" data-v="safe"')}${chip('بطاقة اللقطة', ST.ov.lbl, 'data-act="ov" data-v="lbl"')}</div></section>
-  <section><h3>المشروع</h3><p class="note">يُحفظ عملك تلقائيًا في هذا المتصفح، ويمكنك نسخه كنص لتنقله إلى جهاز آخر.</p><div class="btns"><button class="btn" data-act="newProj">${IC.plus} مشروع جديد</button><button class="btn" data-act="json">${IC.copy} نسخ أو لصق المشروع</button></div></section>${appSection()}`;
+  <section><h3>المشروع</h3><p class="note">${PRJ ? `«${esc(PRJ.name)}»، المشهد ${PRJ.cur + 1} من ${PRJ.scenes.length}. ` : ''}كل مشهد له مكانه وشخصياته ولقطاته، ويُحفظ كل شيء تلقائيًا في هذا الجهاز. احفظه كملف لتنقله إلى جهاز آخر أو ترسله لتلامذتك.</p><div class="btns"><button class="btn" data-act="scenes">${IC.scenes} المشاهد</button><button class="btn" data-act="saveFile">${IC.dl} احفظ المشروع كملف</button><button class="btn" data-act="home">${IC.home} كل المشاريع</button></div></section>${appSection()}`;
 }
 function listChips(arr) { return arr.length ? `<div class="chips">${arr.map(h => chip(esc(h.name), h.id === RT.sel, `data-act="sel" data-v="${h.id}"`)).join('')}</div>` : '<p class="note">لا يوجد شيء بعد.</p>'; }
 function pCast() {
@@ -192,6 +190,7 @@ function edActs(s) {
     if (a.type === 'walk' || a.type === 'run') extra = `<button class="mini" data-act="showPath" data-ai="${i}">${IC.pin} عدّل الوجهة</button>`;
     if (a.type === 'eyes') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[0, 'إلى الأمام'], [-1, 'يمينًا'], [1, 'يسارًا'], [2, 'إلى الأعلى'], [-2, 'إلى الأسفل']], a.v == null ? 1 : a.v)}</select>`;
     if (a.type === 'turn') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[-180, 'استدارة كاملة'], [-90, 'يمينًا 90°'], [-45, 'يمينًا 45°'], [45, 'يسارًا 45°'], [90, 'يسارًا 90°']], a.v == null ? 90 : a.v)}</select>`;
+    if (a.type === 'watch') extra = `<select data-ai="${i}" data-af="to" aria-label="يتابع من">${ST.items.filter(x => x.id !== s.id).map(x => `<option value="${x.id}"${x.id === a.to ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
     if (a.type === 'look') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[-70, 'إلى اليمين'], [-30, 'قليلًا يمينًا'], [0, 'إلى الأمام'], [30, 'قليلًا يسارًا'], [70, 'إلى اليسار']], a.v == null ? 60 : a.v)}</select>`;
     return `<div class="actrow"><div class="at">${actLabel(a, s)}</div><button class="mini" data-act="delAct" data-ai="${i}" aria-label="حذف الحركة">${IC.trash}</button>
     <div class="ap"><label>من <input type="number" step=".1" min="0" value="${fmt(a.t)}" data-ai="${i}" data-af="t"></label><label>المدة <input type="number" step=".1" min=".1" value="${fmt(a.dur)}" data-ai="${i}" data-af="dur"></label>${extra}</div></div>`;
@@ -222,9 +221,13 @@ function pCams() {
   ${!free ? `<div class="row"><span>الهدف</span><select data-f="target" data-s="cam">${opts(c.target)}</select></div>` : ''}
   ${mode === 'pair' || ofs ? `<div class="row"><span>${mode === 'pair' ? 'مع' : mode === 'ots' ? 'فوق كتف' : 'بعيني'}</span><select data-f="other" data-s="cam"><option value="">—</option>${opts(c.other, c.target)}</select></div>` : ''}
   <p class="note">${MODE_INFO[mode]}${(mode === 'pair' || ofs) && !c.other ? ' <b>اختر الشخصية الثانية.</b>' : ''}</p>
-  ${!free ? `<button class="btn" data-act="freeze">${IC.pin} ثبّت الكاميرا في مكانها الحالي</button><p class="note" style="margin-top:6px">تتحول إلى كاميرا حرة بالكادر نفسه، ثم لا تتبع أحدًا.</p>` : ''}</section>`;
+  ${!free ? `<div class="row"><span>مع الهدف</span><div class="chips">${[['pan', 'تلتفت معه'], ['move', 'تتحرك معه'], ['off', 'لا تتبعه']].map(([k, t]) => chip(t, camFollow(c) === k, `data-act="set" data-f="follow" data-v="${k}" data-s="cam"`)).join('')}</div></div>
+  <p class="note">${camFollow(c) === 'pan' ? 'الكاميرا تبقى في مكانها وتدور لتُبقي الهدف في الكادر وهو يتحرك.' : camFollow(c) === 'move' ? 'الكاميرا تتنقل مع الهدف وتحافظ على الحجم والزاوية نفسيهما.' : 'الكادر يُضبط في بداية اللقطة فقط، والهدف يستطيع الخروج منه.'}</p>
+  <button class="btn" data-act="freeze">${IC.pin} ثبّت الكاميرا في مكانها الحالي</button><p class="note" style="margin-top:6px">تتحول إلى كاميرا حرة بالكادر نفسه.</p>` : ''}</section>`;
   if (free) {
     h += `<section><h3>مكان الكاميرا</h3>${rng('الارتفاع', 'py', .1, 12, .05, c.py == null ? 1.5 : c.py, 'cam')}${rng('الاتجاه', 'yaw', -180, 180, 1, c.yaw || 0, 'cam')}${rng('الإمالة', 'pitch', -89, 60, 1, c.pitch || 0, 'cam')}
+    <div class="row"><span>تنظر دائمًا إلى</span><select data-f="look" data-s="cam"><option value="">لا أحد (اتجاه ثابت)</option>${ST.items.map(s => `<option value="${s.id}"${s.id === c.look ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
+    <p class="note">إن اخترت شخصًا، تبقى الكاميرا في مكانها وتدور لتتبعه أينما ذهب.</p>
     <div class="addact"><select id="aimSel" aria-label="وجّهها نحو">${ST.items.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select><button class="btn" data-act="aimAt">وجّهها نحوه</button></div>
     <div class="btns" style="margin-top:8px"><button class="btn${RT.pick && RT.pick.kind === 'aim' ? ' pri' : ''}" data-act="aimPick">${IC.pin} انقر على الأرض لتوجيهها</button></div>
     <p class="note" style="margin-top:8px">اسحب الكاميرا في «عين المخرج» لتحريكها، واسحب داخل الكادر لتدويرها، والعجلة أو إصبعان لتقديمها وإرجاعها.</p></section>
@@ -303,7 +306,7 @@ function updTransport() {
   $('#bUndo').disabled = HIST.i <= 0; $('#bRedo').disabled = HIST.i >= HIST.s.length - 1;
 }
 function play(from0) { if (!ST.shots.length) return toast('أضف لقطة أولًا'); closePop(); hideCtx(); RT.src = 'edit'; RT.quiz = null; RT.camPrevOn = false; if (from0 || RT.t >= totalDur() - .02) RT.t = 0; RT.playing = true; RT.view = 'cam'; RT.lastShot = -1; updTransport(); renderSUI(); RT.dirty = true; }
-function pause() { RT.playing = false; updTransport(); renderSUI(); if (TAB === 'cast' || TAB === 'props') renderPanel(); }
+function pause() { RT.playing = false; RT.film = false; updTransport(); renderSUI(); if (TAB === 'cast' || TAB === 'props') renderPanel(); }
 function jumpCut(d) { const st = shotStarts().concat([totalDur()]); RT.src = 'edit'; let t = RT.t; if (d > 0) t = st.find(x => x > RT.t + .01) ?? totalDur(); else t = [...st].reverse().find(x => x < RT.t - .05) ?? 0; RT.t = Math.min(t, Math.max(0, totalDur() - .001)); RT.dirty = true; updPH(true); }
 function setView(v) { RT.view = v; updTransport(); renderSUI(); RT.dirty = true; hint(v === 'dir' ? 'عين المخرج: انقر على عنصر لتحديده، اسحب السهم البرتقالي لتدويره، واضغط مطولًا على الأرض ليمشي إليها.' : 'عين الكاميرا: انقر على عنصر لتحديده، واسحب داخل الكادر لتدوير الكاميرا.', 4200, 'view-' + v); }
 function cine(on) { document.body.classList.toggle('cine', on); if (on) { RT.prevView = RT.view; RT.view = 'cam'; play(true); hint('اضغط زر الرجوع أو Esc للخروج', 2500, 'cine'); } else { RT.view = RT.prevView || 'cam'; renderSUI(); } updTransport(); setTimeout(onResize, 30); }
@@ -367,6 +370,7 @@ function addAction(s, type, tAt) {
   const t0 = +(tAt == null ? RT.t : tAt).toFixed(2), st = evalItem(s, t0), a = { type, t: t0, dur: ACT_DUR[type] || 1 };
   if (type === 'walk' || type === 'run') { const d = type === 'run' ? 5 : 2.5; a.tx = +(st.x + Math.sin(st.rot) * d).toFixed(2); a.tz = +(st.z + Math.cos(st.rot) * d).toFixed(2); }
   if (type === 'turn') a.v = 90; if (type === 'look') a.v = 60; if (type === 'eyes') a.v = 1;
+  if (type === 'watch') { const o = ST.items.find(x => x.id !== s.id && x.kind !== 'prop') || ST.items.find(x => x.id !== s.id); if (!o) { toast('أضف شخصًا أو شيئًا آخر ليتابعه بنظره'); return -1; } a.to = o.id; }
   s.actions.push(a); const ai = s.actions.length - 1; RT.sel = s.id; RT.selAct = { id: s.id, ai }; commit();
   if (type === 'walk' || type === 'run') showPath(s.id, ai);
   return ai;
@@ -415,7 +419,7 @@ function storyboard() {
     cards.push({ i, c, sh, img: c2.toDataURL('image/jpeg', .86), acts, R });
   });
   renderer.setScissorTest(false); RT.dirty = true;
-  openModal('لوحة القصة', `<div class="btns" style="margin-bottom:12px"><button class="btn" data-act="sketch">أسلوب الرسم</button><button class="btn" data-act="copyList">${IC.copy} نسخ قائمة اللقطات</button></div><div class="sb" id="sbg">${cards.map(k => `<div class="sbc"><img src="${k.img}" alt="لقطة ${k.i + 1}"><h4><span>لقطة ${k.i + 1} — ${esc(k.c.name)}</span><bdi dir="ltr">${fmt(k.sh.dur)}s</bdi></h4><p><b>${sizeAr(k.c)}</b> · ${k.c.mode === 'free' ? '' : ANG[k.c.angle].ar + ' · '}${MV[k.c.move].ar} · <bdi dir="ltr">${Math.round(k.R.f)}mm</bdi></p><p>${k.acts.length ? esc(k.acts.join('، ')) : esc((itemById(k.c.target) || {}).name || '')}</p></div>`).join('')}</div>`);
+  openModal('لوحة القصة', `<div class="btns" style="margin-bottom:12px"><button class="btn" data-act="sketch">أسلوب الرسم</button><button class="btn" data-act="copyList">${IC.copy} نسخ قائمة اللقطات</button></div><div class="sb" id="sbg">${cards.map(k => `<div class="sbc"><img src="${k.img}" alt="لقطة ${k.i + 1}"><h4><span>لقطة ${k.i + 1}${k.sh.title ? ': ' + esc(k.sh.title) : ' — ' + esc(k.c.name)}</span><bdi dir="ltr">${fmt(k.sh.dur)}s</bdi></h4><p><b>${sizeAr(k.c)}</b> · ${k.c.mode === 'free' ? '' : ANG[k.c.angle].ar + ' · '}${MV[k.c.move].ar} · <bdi dir="ltr">${Math.round(k.R.f)}mm</bdi></p><p>${k.sh.note ? esc(k.sh.note) : k.acts.length ? esc(k.acts.join('، ')) : esc((itemById(k.c.target) || {}).name || '')}</p></div>`).join('')}</div>`);
 }
 function shotListText() {
   return ST.shots.map((sh, i) => { const c = camById(sh.cam); if (!c) return ''; const t = itemById(c.target); return `لقطة ${i + 1} | الكاميرا ${c.name} | ${c.mode === 'free' ? 'حرة' : SZ[c.size].ar + ' (' + c.size + ') | ' + ANG[c.angle].ar} | ${MV[c.move].ar}${c.mode && c.mode !== 'single' ? ' | ' + MODES.find(m => m.k === c.mode).ar : ''} | ${t ? t.name : ''} | ${c.lens}mm | ${fmt(sh.dur)} ث`; }).join('\n');
@@ -424,9 +428,9 @@ function shotListText() {
 /* ---------- backdrop ---------- */
 function handleBd(input) {
   const f = input.files && input.files[0]; if (!f) return;
-  const rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); RT.bdImg = c.toDataURL('image/jpeg', .85); try { localStorage.setItem(KEY + '-bd', RT.bdImg); } catch (e) { } ST.bd = ST.bd || { follow: 1, dist: 12, size: 10 }; setBackdrop(c); commit(); toast('أُضيفت الخلفية'); }; img.src = rd.result; }; rd.readAsDataURL(f);
+  const rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); RT.bdImg = c.toDataURL('image/jpeg', .85); try { localStorage.setItem(bdKey(), RT.bdImg); } catch (e) { } ST.bd = ST.bd || { follow: 1, dist: 12, size: 10 }; setBackdrop(c); commit(); toast('أُضيفت الخلفية'); }; img.src = rd.result; }; rd.readAsDataURL(f);
 }
-function loadBd() { if (!ST.bd) return; let u = null; try { u = localStorage.getItem(KEY + '-bd'); } catch (e) { } if (!u) return; const img = new Image(); img.onload = () => { RT.bdImg = u; setBackdrop(img); if (TAB === 'scene') renderPanel(); }; img.src = u; }
+function loadBd() { if (!ST.bd) return; let u = null; try { u = localStorage.getItem(bdKey()); } catch (e) { } if (!u) return; const img = new Image(); img.onload = () => { RT.bdImg = u; setBackdrop(img); if (TAB === 'scene') renderPanel(); }; img.src = u; }
 
 /* ---------- event wiring ---------- */
 function scopeObj(s) { return s === 'item' ? itemById(RT.sel) : s === 'cam' ? camById(RT.cam) : s === 'bd' ? ST.bd : s === 'st' ? ST : null; }
@@ -441,10 +445,11 @@ function onPanelClick(e) {
     case 'showPath': if (sel) showPath(sel.id, +b.dataset.ai); break;
     case 'aspect': ST.aspect = v; commit(); break;
     case 'ov': ST.ov[v] = ST.ov[v] ? 0 : 1; commit(); break;
-    case 'bdDel': RT.bdImg = null; ST.bd = null; setBackdrop(null); try { localStorage.removeItem(KEY + '-bd'); } catch (e) { } commit(); break;
+    case 'bdDel': RT.bdImg = null; ST.bd = null; setBackdrop(null); try { localStorage.removeItem(bdKey()); } catch (e) { } commit(); break;
     case 'bdMode': ST.bd.follow = +v; commit(); break;
-    case 'newProj': openModal('مشروع جديد', `<p>سيُستبدل المشهد الحالي بمشهد بسيط في الاستوديو. يمكنك الرجوع إليه بزر التراجع.</p><div class="btns"><button class="btn pri" data-act="newOk">ابدأ مشروعًا جديدًا</button></div>`); break;
-    case 'newOk': closeModal(); setState(emptyState(), 'مشروع جديد'); break;
+    case 'scenes': SHEET.add = false; SHEET.del = null; openScenes(); break;
+    case 'saveFile': exportProjectFile(PRJ); break;
+    case 'home': showHome(); break;
     case 'json': openModal('المشروع كنص', `<p class="note">انسخ هذا النص لحفظ المشروع أو نقله، أو الصق نص مشروع آخر ثم اضغط «تحميل».</p><textarea id="pj">${esc(JSON.stringify(ST))}</textarea><div class="btns" style="margin-top:10px"><button class="btn" data-act="pjCopy">${IC.copy} نسخ</button><button class="btn pri" data-act="pjLoad">تحميل</button></div>`); break;
     case 'pjCopy': copyText($('#pj').value); break;
     case 'pjLoad': try { const S = JSON.parse($('#pj').value); if (!S || !Array.isArray(S.items)) throw 0; closeModal(); setState(S, 'تم تحميل المشروع'); } catch (err) { toast('النص ليس مشروعًا صالحًا'); } break;
@@ -487,12 +492,12 @@ function onPanelClick(e) {
     case 'dupShot': { const i = +b.dataset.i, c = Object.assign({}, ST.shots[i], { id: nid('s') }); ST.shots.splice(i + 1, 0, c); commit(); break; }
     case 'delShot': ST.shots.splice(+b.dataset.i, 1); commit(); break;
     case 'addShotSel': { const id = $('#shotCam').value; if (camById(id)) { ST.shots.push({ id: nid('s'), cam: id, dur: 2.5, trans: 'cut' }); commit(); } break; }
-    case 'lesson': RT.bdImg = null; setBackdrop(null); setState(lessonState(v), 'الدرس جاهز — اضغط تشغيل'); TAB = 'learn'; renderTabs(); renderPanel(); break;
+    case 'lesson': TAB = 'learn'; renderTabs(); openLesson(v); break;
     case 'tour': tour(v); break;
     case 'quiz': RT.quiz = null; newQuiz(); break;
     case 'qAns': if (RT.quiz && !RT.quiz.picked) { RT.quiz.picked = v; RT.quiz.n++; if (v === RT.quiz.ans) RT.quiz.right++; renderPanel(); } break;
     case 'qNext': newQuiz(); break;
-    case 'expRes': case 'expFps': case 'expOv': case 'expGo': case 'expCancel': case 'expSave': case 'expShare': expAct(A, v); break;
+    case 'expRes': case 'expFps': case 'expOv': case 'expFilm': case 'expGo': case 'expCancel': case 'expSave': case 'expShare': expAct(A, v); break;
     case 'qEnd': if (RT.quiz) RT.qLast = `${RT.quiz.right} من ${RT.quiz.n}`; RT.quiz = null; RT.dirty = true; renderPanel(); break;
   }
 }
@@ -508,7 +513,7 @@ function onPanelChange(e) {
   const el = e.target;
   if (el.id === 'bdFile') return handleBd(el);
   if (el.dataset.f && el.dataset.s) { const o = scopeObj(el.dataset.s); if (!o) return; let v = el.value; if (el.type === 'range') v = +v; if (el.tagName === 'SELECT' && el.dataset.f === 'other' && !v) v = null; o[el.dataset.f] = v; if (el.dataset.s === 'cam') RT.src = o.id; commit(); return; }
-  if (el.dataset.ai != null && el.dataset.af) { const s = itemById(RT.sel), a = s && s.actions[+el.dataset.ai]; if (!a) return; let v = +el.value; if (el.dataset.af === 'dur') v = Math.max(.1, v); if (el.dataset.af === 't') v = Math.max(0, v); a[el.dataset.af] = v; commit(); return; }
+  if (el.dataset.ai != null && el.dataset.af) { const s = itemById(RT.sel), a = s && s.actions[+el.dataset.ai]; if (!a) return; if (el.dataset.af === 'to') { a.to = el.value; commit(); return; } let v = +el.value; if (el.dataset.af === 'dur') v = Math.max(.1, v); if (el.dataset.af === 't') v = Math.max(0, v); a[el.dataset.af] = v; commit(); return; }
   if (el.dataset.shot != null) { const sh = ST.shots[+el.dataset.shot]; if (sh) { sh[el.dataset.sf] = el.value; commit(); } }
 }
 function bindAll() {
@@ -527,7 +532,7 @@ function bindAll() {
   $('#bCine').onclick = () => stageOn() ? exitStage() : enterStage(); bindSUI();
   $('#srcBack').onclick = () => { RT.src = 'edit'; RT.camPrevOn = false; RT.dirty = true; if (TAB === 'cams') renderPanel(); };
   bindTL(); if (window.bindCtx) bindCtx();
-  window.kadrBack = () => { if (!$('#modal').hidden) { closeModal(); return true; } if (window.closePop && closePop()) return true; if (document.body.classList.contains('cine')) { cine(false); return true; } if (stageOn()) { exitStage(); return true; } if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); return true; } return false; };
+  window.kadrBack = () => { if (!$('#modal').hidden) { closeModal(); return true; } if (window.closePop && closePop()) return true; if (document.body.classList.contains('cine')) { cine(false); return true; } if (stageOn()) { exitStage(); return true; } if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); return true; } if (homeOn()) { if (HOME.step || HOME.menu) { HOME.step = null; HOME.menu = null; renderHome(); return true; } return false; } showHome(); return true; };
   document.addEventListener('keydown', e => {
     if (e.target.closest('input,select,textarea')) return;
     if (e.key === 'Escape') { if (window.closePop && closePop()) return; if (!$('#modal').hidden) closeModal(); else if (document.body.classList.contains('cine')) cine(false); else if (stageOn()) exitStage(); else if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); } }
@@ -546,23 +551,22 @@ function loop(now) {
   const dt = Math.min(.1, (now - lastNow) / 1000); lastNow = now;
   if (RT.playing) {
     RT.t += dt; const end = totalDur();
-    if (RT.t >= end) { if (RT.loop) { RT.t = 0; RT.lastShot = -1; } else { RT.t = Math.max(0, end - .001); RT.playing = false; updTransport(); if (document.body.classList.contains('cine')) setTimeout(() => cine(false), 600); } }
+    if (RT.t >= end) { const film = RT.film; if (film && filmNext()) { } else if (RT.loop && !film) { RT.t = 0; RT.lastShot = -1; } else { RT.t = Math.max(0, end - .001); RT.playing = false; updTransport(); if (document.body.classList.contains('cine')) setTimeout(() => cine(false), 600); } }
     RT.dirty = true;
   }
   if (RT.camPrevOn) { RT.camPrev += dt / 3; if (RT.camPrev > 1.25) RT.camPrev = 0; RT.dirty = true; }
-  if (RT.dirty) { RT.dirty = false; try { draw(); } catch (err) { console.error(err); } }
+  if (RT.dirty && !document.body.classList.contains('homeon')) { RT.dirty = false; try { draw(); } catch (err) { console.error(err); } }
   requestAnimationFrame(loop);
 }
 function boot() {
   bindAll();
   if (!window.THREE) { $('#empty').style.display = 'flex'; $('#empty').textContent = 'تعذّر تحميل محرك العرض ثلاثي الأبعاد. تحقق من الاتصال ثم أعد تحميل الصفحة.'; return; }
-  const saved = loadSaved();
-  ST = normalize(saved && saved.v === 1 && Array.isArray(saved.items) ? saved : lessonState('cut'));
-  RT.cam = ST.cams[0] ? ST.cams[0].id : null;
+  migrateOld();
+  ST = normalize(blankScene('studio')); RT.cam = ST.cams[0] ? ST.cams[0].id : null;
   init3D(); fitOrbit(); refreshWorld();
   HIST.s = [JSON.stringify(ST)]; HIST.i = 0;
-  renderTabs(); renderAll(); loadBd(); registerSW();
+  renderTabs(); renderAll(); registerSW(); bindProject();
   requestAnimationFrame(loop);
-  if (!saved) setTimeout(() => toast('درس «القطع على الحركة» جاهز — اضغط تشغيل'), 700);
+  showHome();
 }
 

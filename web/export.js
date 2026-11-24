@@ -1,13 +1,16 @@
 /* كادر — export the edit as a video (frame-accurate MP4 with WebCodecs, real-time fallback) */
-const EXP = { res: 720, fps: 24, ov: false, busy: false, cancel: false, blob: null, url: null, ext: 'mp4', dl: null };
+const EXP = { res: 720, fps: 24, ov: false, film: false, busy: false, cancel: false, blob: null, url: null, ext: 'mp4', dl: null };
 function inFrame() { try { return window.top !== window; } catch (e) { return true; } }
 function expSupportFast() { return !!(window.VideoEncoder && window.VideoFrame && window.Mp4Muxer); }
 function openExport() {
-  if (!ST.shots.length) return toast('أضف لقطات إلى المونتاج أولًا');
+  const multi = PRJ && PRJ.scenes.length > 1; if (!multi) EXP.film = false;
+  if (!ST.shots.length && !EXP.film) return toast('أضف لقطات إلى المونتاج أولًا');
   if (EXP.busy) return;
-  pause();
+  pause(); if (PRJ) flushSave();
+  const fd = multi ? PRJ.scenes.reduce((a, S) => a + sceneDur(S), 0) : 0;
   openModal('تصدير الفيديو', `<div class="exp" id="exp">
-  <p class="note">يُرسم المونتاج صورةً صورة ثم يُحفظ فيديو. المدة <bdi dir="ltr">${fmt(totalDur())}s</bdi> · ${ST.shots.length} لقطات · النسبة <bdi dir="ltr">${ST.aspect}</bdi></p>
+  ${multi ? `<div class="row"><span>ماذا تصدّر</span><div class="chips">${chip(`هذا المشهد <small><bdi dir="ltr">${fmt(totalDur())}s</bdi></small>`, !EXP.film, 'data-act="expFilm" data-v="0"')}${chip(`الفيلم كاملًا <small>${PRJ.scenes.length} مشاهد · <bdi dir="ltr">${fmt(fd)}s</bdi></small>`, EXP.film, 'data-act="expFilm" data-v="1"')}</div></div>` : ''}
+  <p class="note">يُرسم المونتاج صورةً صورة ثم يُحفظ فيديو. ${EXP.film ? `المدة <bdi dir="ltr">${fmt(fd)}s</bdi> · ${prjStats(PRJ).shots} لقطة` : `المدة <bdi dir="ltr">${fmt(totalDur())}s</bdi> · ${ST.shots.length} لقطات`} · النسبة <bdi dir="ltr">${ST.aspect}</bdi></p>
   <div class="row"><span>الدقة</span><div class="chips">${chip('<bdi dir="ltr">720p</bdi>', EXP.res !== 1080, 'data-act="expRes" data-v="720"')}${chip('<bdi dir="ltr">1080p</bdi>', EXP.res === 1080, 'data-act="expRes" data-v="1080"')}</div></div>
   <div class="row"><span>الإيقاع</span><div class="chips">${chip('<bdi dir="ltr">24 fps</bdi> سينمائي', EXP.fps !== 30, 'data-act="expFps" data-v="24"')}${chip('<bdi dir="ltr">30 fps</bdi>', EXP.fps === 30, 'data-act="expFps" data-v="30"')}</div></div>
   <div class="row"><span>على الصورة</span><div class="chips">${chip('بطاقة اللقطة والزمن', EXP.ov, 'data-act="expOv"')}</div></div>
@@ -19,6 +22,7 @@ function expAct(A, v) {
     case 'expRes': EXP.res = +v; openExport(); break;
     case 'expFps': EXP.fps = +v; openExport(); break;
     case 'expOv': EXP.ov = !EXP.ov; openExport(); break;
+    case 'expFilm': EXP.film = v === '1'; openExport(); break;
     case 'expGo': runExport(); break;
     case 'expCancel': EXP.cancel = true; break;
     case 'expSave': expSave(); break;
@@ -56,7 +60,8 @@ function drawOverlay(cx, pf, t, W, H) {
   cx.save(); cx.font = `600 ${Math.round(21 * k)}px "IBM Plex Sans Arabic", sans-serif`; cx.textBaseline = 'middle'; cx.textAlign = 'center';
   const pill = (txt, x, y, right, bg, fg, dir) => { cx.direction = dir || 'rtl'; const w = cx.measureText(txt).width + 22 * k, x0 = right ? x - w : x; cx.fillStyle = bg; rrect(cx, x0, y, w, ph, 8 * k); cx.fill(); cx.fillStyle = fg; cx.fillText(txt, x0 + w / 2, y + ph / 2 + 1); return w; };
   pill('● ' + tc(t), pad, pad, false, 'rgba(15,7,6,.72)', '#f5e9db', 'ltr');
-  pill(`لقطة ${pf.pc.shot.i + 1}/${ST.shots.length}`, W - pad, pad, true, 'rgba(15,7,6,.72)', '#f5e9db');
+  const sw = pill(`لقطة ${pf.pc.shot.i + 1}/${ST.shots.length}`, W - pad, pad, true, 'rgba(15,7,6,.72)', '#f5e9db');
+  if (EXP.film && PRJ) pill(`${PRJ.scenes.indexOf(ST) + 1}. ${ST.name}`, W - pad - sw - 6 * k, pad, true, 'rgba(15,7,6,.72)', '#f2a23a');
   let x = W - pad, y = H - pad - ph;
   x -= pill(c.name, x, y, true, '#f2a23a', '#1c0e0c', 'ltr') + 6 * k;
   x -= pill(c.mode === 'free' ? 'كاميرا حرة' : `${SZ[c.size].ar} · ${c.size}`, x, y, true, 'rgba(15,7,6,.78)', '#f5e9db') + 6 * k;
@@ -77,13 +82,17 @@ async function renderVideo(onP) {
   const asp = aspV(), base = EXP.res === 1080 ? 1080 : 720; let W, H;
   if (asp >= 1) { H = base; W = Math.round(base * asp / 2) * 2; if (W > 1920) { W = 1920; H = Math.round(1920 / asp / 2) * 2; } }
   else { W = base; H = Math.round(base / asp / 2) * 2; }
-  const fps = EXP.fps === 30 ? 30 : 24, N = Math.max(1, Math.round(totalDur() * fps));
+  const fps = EXP.fps === 30 ? 30 : 24, film = EXP.film && PRJ && PRJ.scenes.length > 1, home = PRJ ? PRJ.cur : 0;
+  const segs = film ? PRJ.scenes.map((S, i) => ({ i, n: Math.round(sceneDur(S) * fps) })).filter(g => g.n > 0) : [{ i: home, n: Math.max(1, Math.round(totalDur() * fps)) }];
+  const N = segs.reduce((a, g) => a + g.n, 0); let curSeg = home;
+  const useScene = k => { if (!film || k === curSeg) return; ST = normalize(PRJ.scenes[k]); curSeg = k; setBackdrop(null); refreshWorld(); };
+  const at = i => { for (const g of segs) { if (i < g.n) return [g.i, i]; i -= g.n; } const g = segs[segs.length - 1]; return [g.i, g.n - 1]; };
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const r2 = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
   r2.setPixelRatio(1); r2.setSize(W, H, false); r2.shadowMap.enabled = true; r2.shadowMap.type = THREE.PCFSoftShadowMap;
   const comp = document.createElement('canvas'); comp.width = W; comp.height = H; const cx = comp.getContext('2d');
   const cam = new THREE.PerspectiveCamera(40, W / H, .02, 600), tick = () => new Promise(r => setTimeout(r, 0));
-  const frame = i => drawExportFrame(r2, cam, cx, i / fps, W, H);
+  const frame = i => { const [k, j] = at(i); useScene(k); drawExportFrame(r2, cam, cx, j / fps, W, H); };
   try {
     if (expSupportFast()) {
       const codec = await pickCodec(W, H, fps);
@@ -120,10 +129,10 @@ async function renderVideo(onP) {
     }
     await new Promise(r => setTimeout(r, 1000 / fps + 60)); rec.stop(); await done;
     return { blob: new Blob(chunks, { type: mime.split(';')[0] }), ext: mime.includes('mp4') ? 'mp4' : 'webm', w: W, h: H };
-  } finally { r2.dispose(); try { r2.forceContextLoss(); } catch (e) { } applyAll(RT.t); RT.dirty = true; }
+  } finally { r2.dispose(); try { r2.forceContextLoss(); } catch (e) { } if (film && curSeg !== home) { ST = PRJ.scenes[home]; refreshWorld(); loadBd(); } applyAll(RT.t); RT.dirty = true; }
 }
 function blobB64(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(b); }); }
-function expName() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `kadr-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${EXP.ext}`; }
+function expName() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${PRJ ? fileSafe(PRJ.name).replace(/\s+/g, '-') : 'kadr'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${EXP.ext}`; }
 async function expSave() {
   if (!EXP.blob) return; const name = expName();
   if (window.AndroidBridge && AndroidBridge.saveFile) { try { AndroidBridge.saveFile(name, await blobB64(EXP.blob), EXP.blob.type); } catch (e) { toast('تعذّر الحفظ'); } return; }

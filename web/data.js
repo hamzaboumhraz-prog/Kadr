@@ -81,11 +81,12 @@ const POSES = {
   cross: { lShX: .5, lShZ: -.3, lEl: 1.75, rShX: .5, rShZ: -.3, rEl: 1.8 },
   shock: { lShX: 2.25, lShZ: .55, lEl: 2.05, rShX: 2.25, rShZ: .55, rEl: 2.05, neckX: .08 },
   armsup: { lShX: .25, lShZ: 2.75, lEl: .2, rShX: .25, rShZ: 2.75, rEl: .2, neckX: -.12 },
-  bend: { spine: 1.05, lHipX: .35, rHipX: .35, lKnee: .6, rKnee: .6, hipY: -.15, lShX: 1.0, rShX: 1.0, lEl: .2, rEl: .2, neckX: -.35 }
+  bend: { spine: 1.05, lHipX: .35, rHipX: .35, lKnee: .6, rKnee: .6, hipY: -.15, lShX: 1.0, rShX: 1.0, lEl: .2, rEl: .2, neckX: -.35 },
+  text: { rShX: .5, rShZ: .12, rEl: 1.55, lShX: .38, lShZ: -.02, lEl: 1.45, neckX: .42 }
 };
 for (const k in POSES) POSES[k] = Object.assign({}, POSE0, POSES[k]);
-const POSE_AR = { stand: 'واقف', sit: 'جالس', lie: 'مستلقٍ', binoc: 'يمسك منظارًا', phone: 'على الهاتف', point: 'يشير', cross: 'مكتوف اليدين', shock: 'يداه على رأسه', armsup: 'يرفع يديه' };
-const POSE_HOLD = { binoc: 'binoc', phone: 'phone' };
+const POSE_AR = { stand: 'واقف', sit: 'جالس', lie: 'مستلقٍ', binoc: 'يمسك منظارًا', phone: 'على الهاتف', text: 'ينظر في هاتفه', point: 'يشير', cross: 'مكتوف اليدين', shock: 'يداه على رأسه', armsup: 'يرفع يديه' };
+const POSE_HOLD = { binoc: 'binoc', phone: 'phone', text: 'tphone' };
 
 const ACT_GROUPS = [['move', 'التنقّل'], ['face', 'الرأس والوجه'], ['body', 'اليدان والجسد'], ['pose', 'الوضعيات']];
 const ACTS = {
@@ -94,6 +95,7 @@ const ACTS = {
   jump: { ar: 'يقفز', who: 'living', g: 'move' },
   turn: { ar: 'يستدير', who: 'all', g: 'move' },
   look: { ar: 'يلتفت برأسه', who: 'living', g: 'face' },
+  watch: { ar: 'يتابع بنظره', who: 'living', g: 'face', to: 1 },
   eyes: { ar: 'يحرّك عينيه', who: 'human', g: 'face' },
   talk: { ar: 'يتكلم', who: 'human', g: 'face' },
   laugh: { ar: 'يضحك', who: 'human', g: 'face' },
@@ -105,16 +107,18 @@ const ACTS = {
   clap: { ar: 'يصفّق', who: 'human', g: 'body' },
   raise: { ar: 'يرفع المنظار', who: 'human', g: 'body', pose: 'binoc' },
   phone: { ar: 'يردّ على الهاتف', who: 'human', g: 'body', pose: 'phone' },
+  browse: { ar: 'يتصفح هاتفه', who: 'human', g: 'body', pose: 'text' },
+  dress: { ar: 'يرتدي ملابسه', who: 'human', g: 'body' },
   cross: { ar: 'يكتف يديه', who: 'human', g: 'body', pose: 'cross' },
   shock: { ar: 'يضع يديه على رأسه', who: 'human', g: 'body', pose: 'shock' },
   armsup: { ar: 'يرفع يديه', who: 'human', g: 'body', pose: 'armsup' },
   dance: { ar: 'يرقص', who: 'human', g: 'body' },
-  sit: { ar: 'يجلس', who: 'human', g: 'pose', pose: 'sit' },
+  sit: { ar: 'يجلس', who: 'living', g: 'pose', pose: 'sit' },
   bend: { ar: 'ينحني ليلتقط', who: 'human', g: 'pose' },
-  lie: { ar: 'يستلقي', who: 'human', g: 'pose', pose: 'lie' },
-  stand: { ar: 'يقف / يعود', who: 'human', g: 'pose', pose: 'stand' }
+  lie: { ar: 'يستلقي أو ينام', who: 'living', g: 'pose', pose: 'lie' },
+  stand: { ar: 'يقف / يعود', who: 'living', g: 'pose', pose: 'stand' }
 };
-const ACT_DUR = { walk: 2, run: 1.5, jump: .8, turn: .8, look: .6, eyes: .4, talk: 2.4, laugh: 1.6, nod: 1, shake: 1, wave: 1.6, gesture: 2.4, point: .8, clap: 1.6, raise: 1.2, phone: 1, cross: .8, shock: .7, armsup: .7, dance: 3, sit: 1.2, bend: 1.6, lie: 1.4, stand: 1 };
+const ACT_DUR = { watch: 2.5, browse: 1, dress: 2.4, walk: 2, run: 1.5, jump: .8, turn: .8, look: .6, eyes: .4, talk: 2.4, laugh: 1.6, nod: 1, shake: 1, wave: 1.6, gesture: 2.4, point: .8, clap: 1.6, raise: 1.2, phone: 1, cross: .8, shock: .7, armsup: .7, dance: 3, sit: 1.2, bend: 1.6, lie: 1.4, stand: 1 };
 
 const CAST = {
   man: { ar: 'رجل', age: 'adult', h: 176, build: 1, skin: '#c99a74', hair: 'short', hairC: '#2b1d14', top: '#ece5d6', bot: '#44502f', btype: 'pants', sleeves: 0, acc: {} },
@@ -135,7 +139,8 @@ const CAST = {
 const ANIMALS = {
   cat: { ar: 'قط', color: '#d58b45' }, dog: { ar: 'كلب', color: '#9b6a43' }, horse: { ar: 'حصان', color: '#6b3f26' },
   sheep: { ar: 'خروف', color: '#f1ece0' }, bird: { ar: 'حمامة', color: '#8a93a3' },
-  camel: { ar: 'جمل', color: '#c9a066' }, donkey: { ar: 'حمار', color: '#8d8a86' }, chicken: { ar: 'دجاجة', color: '#f0ead8' }
+  camel: { ar: 'جمل', color: '#c9a066' }, donkey: { ar: 'حمار', color: '#8d8a86' }, chicken: { ar: 'دجاجة', color: '#f0ead8' },
+  shaggy: { ar: 'كلب أشعث', color: '#7a6a58' }
 };
 const PROPS = {
   tree: { ar: 'شجرة', color: '#4f7a3a' }, palm: { ar: 'نخلة', color: '#5c8a3c' }, rock: { ar: 'صخرة', color: '#9a8f84' },
@@ -145,7 +150,9 @@ const PROPS = {
   board: { ar: 'سبورة', color: '#2e4a3c' }, box: { ar: 'صندوق', color: '#b98a55' }, plant: { ar: 'نبتة', color: '#4f8a46' },
   car: { ar: 'سيارة', color: '#c23b2e' }, streetlight: { ar: 'عمود إنارة', color: '#3a3d42' }, bench: { ar: 'كرسي حديقة', color: '#7a5434' },
   wall: { ar: 'جدار', color: '#e7dcc8' }, ctable: { ar: 'طاولة مقهى', color: '#d8d0c0' }, counter: { ar: 'كونتوار', color: '#6e4a31' },
-  lantern: { ar: 'فانوس', color: '#c9a24a' }, parasol: { ar: 'مظلة شاطئ', color: '#e7a83a' }
+  lantern: { ar: 'فانوس', color: '#c9a24a' }, parasol: { ar: 'مظلة شاطئ', color: '#e7a83a' },
+  suv: { ar: 'سيارة رباعية الدفع', color: '#e8e4dc' }, stall: { ar: 'خيمة سوق', color: '#b5523b' },
+  fence: { ar: 'سياج', color: '#8a6a48' }, hay: { ar: 'كومة تبن', color: '#d9b76a' }
 };
 
 const ENVS = {
@@ -160,7 +167,10 @@ const ENVS = {
   cafe: { ar: 'مقهى (تراس)', light: 'day', r: 14 },
   alley: { ar: 'درب المدينة القديمة', light: 'day', r: 13, ph: 1.2 },
   beach: { ar: 'شاطئ', light: 'sunset', r: 22 },
-  rooftop: { ar: 'سطح منزل', light: 'sunset', r: 15 }
+  rooftop: { ar: 'سطح منزل', light: 'sunset', r: 15 },
+  village: { ar: 'أطراف قرية', light: 'day', r: 20 },
+  souk: { ar: 'سوق أسبوعي', light: 'day', r: 18 },
+  road: { ar: 'طريق هادئ', light: 'day', r: 20 }
 };
 const WEATHER = { clear: 'صافٍ', fog: 'ضباب', rain: 'مطر' };
 const LIGHTS = {

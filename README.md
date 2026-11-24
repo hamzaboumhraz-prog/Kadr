@@ -6,6 +6,11 @@
 - **النسخة على الويب (هاتف وحاسوب):** https://hamzaboumhraz-prog.github.io/Kadr/
 - **تطبيق أندرويد (APK):** https://github.com/hamzaboumhraz-prog/Kadr/releases/latest/download/kadr.apk
 
+## مشاريع ومشاهد وملفات سيناريو
+
+- عند فتح التطبيق تظهر المشاريع. كل مشروع فيه مشاهد، ولكل مشهد مكانه وشخصياته ولقطاته.
+- ملف السيناريو (`.kadr`) يحوّل ديكوباجًا مكتوبًا إلى مشاهد متحركة جاهزة. الصيغة في [`FORMAT.md`](FORMAT.md)، ومثال كامل في [`examples/hura-munammaq.kadr`](examples/hura-munammaq.kadr).
+
 ## كيف يعمل المستودع
 
 | المجلد | المحتوى |
