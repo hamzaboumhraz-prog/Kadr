@@ -104,7 +104,7 @@ function save() { try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (
 function loadSaved() { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 let lastLight = null;
 function refreshWorld() {
-  syncEnv(); syncItems(); if (lastLight !== ST.light + ST.env) { applyLight(); lastLight = ST.light + ST.env; }
+  syncEnv(); syncItems(); const lk = ST.light + ST.env + (ST.weather || ''); if (lastLight !== lk) { applyLight(); lastLight = lk; }
   if (RT.sel && !itemById(RT.sel)) RT.sel = null;
   if (RT.cam && !camById(RT.cam)) RT.cam = ST.cams[0] ? ST.cams[0].id : null;
   if (RT.src !== 'edit' && !camById(RT.src)) RT.src = 'edit';
@@ -119,7 +119,7 @@ function commit() {
 function undo() { if (HIST.i > 0) { HIST.i--; ST = JSON.parse(HIST.s[HIST.i]); save(); refreshWorld(); renderAll(); toast('تراجع'); } }
 function redo() { if (HIST.i < HIST.s.length - 1) { HIST.i++; ST = JSON.parse(HIST.s[HIST.i]); save(); refreshWorld(); renderAll(); } }
 function setState(S, msg) { ST = normalize(S); RT.t = 0; RT.src = 'edit'; RT.sel = null; RT.selShot = null; RT.cam = ST.cams[0] ? ST.cams[0].id : null; RT.quiz = null; RT.camPrevOn = false; RT.view = 'cam'; fitOrbit(); commit(); if (msg) toast(msg); }
-function fitOrbit() { const e = ENVS[ST.env] || ENVS.studio; ORB.r = e.r; ORB.tx = 0; ORB.tz = 0; ORB.ty = .9; ORB.th = .75; ORB.ph = .55; RT.dirty = true; }
+function fitOrbit() { const e = ENVS[ST.env] || ENVS.studio; ORB.r = e.r; ORB.tx = 0; ORB.tz = 0; ORB.ty = .9; ORB.th = .75; ORB.ph = e.ph || .55; RT.dirty = true; }
 
 /* ---------- toast, modal, hint ---------- */
 let toastT = null;
@@ -127,14 +127,16 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('s
 function openModal(title, html) { $('#mt').textContent = title; $('#mb').innerHTML = html; $('#modal').hidden = false; }
 function closeModal() { $('#modal').hidden = true; $('#mb').innerHTML = ''; }
 let hintT = null;
-function hint(m, ms) { const h = $('#hint'); h.textContent = m; h.classList.add('show'); clearTimeout(hintT); if (ms !== 0) hintT = setTimeout(() => h.classList.remove('show'), ms || 3200); }
+function hint(m, ms, key) {
+  if (key) { let c = {}; try { c = JSON.parse(localStorage.getItem('kadr-hints') || '{}'); } catch (e) { } if ((c[key] || 0) >= 2) return; c[key] = (c[key] || 0) + 1; try { localStorage.setItem('kadr-hints', JSON.stringify(c)); } catch (e) { } }
+  const h = $('#hint'); h.textContent = m; h.classList.add('show'); clearTimeout(hintT); if (ms !== 0) hintT = setTimeout(() => h.classList.remove('show'), ms || 3200); }
 function hideHint() { $('#hint').classList.remove('show'); }
 async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('تم النسخ'); } catch (e) { openModal('انسخ النص', `<p class="note">حدّد النص وانسخه يدويًا.</p><textarea readonly>${esc(t)}</textarea>`); } }
 
 /* ---------- tabs & panels ---------- */
 function renderTabs() { $('#tabs').innerHTML = TABS.map(([k, t, ic]) => `<button data-tab="${k}" class="${TAB === k ? 'on' : ''}">${IC[ic]}<span>${t}</span></button>`).join(''); }
 function switchTab(k) { TAB = k; renderTabs(); renderPanel(); if (k !== 'cams' && RT.camPrevOn) RT.camPrevOn = false; }
-function renderAll() { renderPanel(); renderTL(); updTransport(); renderCtx(); }
+function renderAll() { renderPanel(); renderTL(); updTransport(); renderCtx(); renderSUI(); }
 function renderPanel() {
   const p = $('#panel');
   const f = { scene: pScene, cast: pCast, props: pProps, cams: pCams, edit: pEdit, learn: pLearn }[TAB];
@@ -142,7 +144,8 @@ function renderPanel() {
 }
 function pScene() {
   return `<section><h3>المكان</h3><div class="grid2">${Object.entries(ENVS).map(([k, e]) => `<button class="tile${ST.env === k ? ' on' : ''}" data-act="env" data-v="${k}"><span class="sw" style="background:${ENV_SW[k]}"></span><span>${e.ar}</span></button>`).join('')}</div></section>
-  <section><h3>الإضاءة والوقت</h3><div class="chips">${Object.entries(LIGHTS).map(([k, l]) => chip(l.ar, ST.light === k, `data-act="light" data-v="${k}"`)).join('')}</div><p class="note" style="margin-top:8px">الإضاءة جزء من اللغة: الغروب حنين ودفء، والليل غموض وخطر.</p></section>
+  <section><h3>الإضاءة والوقت</h3><div class="chips">${Object.entries(LIGHTS).map(([k, l]) => chip(l.ar, ST.light === k, `data-act="light" data-v="${k}"`)).join('')}</div><p class="note" style="margin-top:8px">الإضاءة جزء من اللغة: الغروب حنين ودفء، والليل غموض وخطر.</p>
+  <h3 style="margin-top:14px">الطقس</h3><div class="chips">${Object.entries(WEATHER).map(([k, v]) => chip(v, (ST.weather || 'clear') === k, `data-act="weather" data-v="${k}"`)).join('')}</div></section>
   <section><h3>نسبة العرض <small>Aspect ratio</small></h3><div class="chips">${ASPECTS.map(a => chip(`<bdi dir="ltr">${a.k}</bdi> <small>${a.ar}</small>`, ST.aspect === a.k, `data-act="aspect" data-v="${a.k}"`)).join('')}</div></section>
   <section><h3>خلفية من صورة</h3><p class="note">صوّر مكانًا حقيقيًا بهاتفك وضعه خلف المشهد كخلفية مسطّحة، مثل الخلفيات المرسومة في الاستوديوهات. المكان لا يتحول إلى مجسّم، لكنك ترى شخصياتك وكادراتك أمامه. تعمل أفضل مع «استوديو فارغ» أو الأماكن المفتوحة.</p>
   <div class="btns"><label class="btn">${IC.img} اختر صورة<input type="file" id="bdFile" accept="image/*" hidden></label>${RT.bdImg ? `<button class="btn danger" data-act="bdDel">إزالة الخلفية</button>` : ''}</div>
@@ -168,6 +171,7 @@ function edHuman(s) {
   <div class="row"><span>الشعر</span><div class="chips">${Object.entries(HAIRS).map(([k, v]) => chip(v, s.hair === k, `data-act="set" data-f="hair" data-v="${k}" data-s="item"`)).join('')}</div></div>
   <div class="row"><span>${s.hair === 'hijab' ? 'لون الحجاب' : 'لون الشعر'}</span>${sws('hairC', s.hair === 'hijab' ? CLOTH : HAIRC, s.hairC, 'item')}</div>
   <div class="row"><span>اللباس العلوي</span>${sws('top', CLOTH, s.top, 'item')}</div>
+  <div class="row"><span>فوقه</span><div><div class="chips">${Object.entries(OUTERS).map(([k, v]) => chip(v, (s.outer || 'none') === k, `data-act="set" data-f="outer" data-v="${k}" data-s="item"`)).join('')}</div>${s.outer && s.outer !== 'none' ? `<div style="margin-top:8px">${sws('outerC', ['#f4f4f0'].concat(CLOTH), s.outerC || '#2f3b52', 'item')}</div>` : ''}</div></div>
   <div class="row"><span>اللباس السفلي</span><div><div class="chips">${Object.entries(BTYPES).map(([k, v]) => chip(v, s.btype === k, `data-act="set" data-f="btype" data-v="${k}" data-s="item"`)).join('')}</div><div style="margin-top:8px">${sws('bot', CLOTH, s.bot, 'item')}</div></div></div>
   <div class="row"><span>الأكمام</span><div class="chips">${chip('طويلة', !!s.sleeves, 'data-act="set" data-f="sleeves" data-v="1" data-n="1" data-s="item"')}${chip('قصيرة', !s.sleeves, 'data-act="set" data-f="sleeves" data-v="0" data-n="1" data-s="item"')}</div></div>
   <div class="row"><span>إكسسوارات</span><div class="chips">${Object.entries(ACCS).map(([k, v]) => chip(v, s.acc && s.acc[k], `data-act="acc" data-v="${k}"`)).join('')}</div></div></section>`;
@@ -185,14 +189,15 @@ function edActs(s) {
   const rows = (s.actions || []).map((a, i) => {
     const picking = RT.pick && RT.pick.id === s.id && RT.pick.ai === i;
     let extra = '';
-    if (a.type === 'walk' || a.type === 'run') extra = `<button class="mini${picking ? ' on' : ''}" data-act="pickAct" data-ai="${i}">${IC.pin} ${picking ? 'انقر على الأرض…' : 'حدّد الوجهة'}</button>`;
+    if (a.type === 'walk' || a.type === 'run') extra = `<button class="mini" data-act="showPath" data-ai="${i}">${IC.pin} عدّل الوجهة</button>`;
+    if (a.type === 'eyes') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[0, 'إلى الأمام'], [-1, 'يمينًا'], [1, 'يسارًا'], [2, 'إلى الأعلى'], [-2, 'إلى الأسفل']], a.v == null ? 1 : a.v)}</select>`;
     if (a.type === 'turn') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[-180, 'استدارة كاملة'], [-90, 'يمينًا 90°'], [-45, 'يمينًا 45°'], [45, 'يسارًا 45°'], [90, 'يسارًا 90°']], a.v == null ? 90 : a.v)}</select>`;
     if (a.type === 'look') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[-70, 'إلى اليمين'], [-30, 'قليلًا يمينًا'], [0, 'إلى الأمام'], [30, 'قليلًا يسارًا'], [70, 'إلى اليسار']], a.v == null ? 60 : a.v)}</select>`;
     return `<div class="actrow"><div class="at">${actLabel(a, s)}</div><button class="mini" data-act="delAct" data-ai="${i}" aria-label="حذف الحركة">${IC.trash}</button>
     <div class="ap"><label>من <input type="number" step=".1" min="0" value="${fmt(a.t)}" data-ai="${i}" data-af="t"></label><label>المدة <input type="number" step=".1" min=".1" value="${fmt(a.dur)}" data-ai="${i}" data-af="dur"></label>${extra}</div></div>`;
   }).join('');
-  return `<section><h3>الحركة في الزمن</h3><p class="note">كل حركة تبدأ في ثانية محددة من المشهد وتظهر في شريط «الحركة» أسفل الشاشة، ويمكنك سحبها هناك.</p>${rows}
-  <div class="addact"><select id="actType" aria-label="نوع الحركة">${types.map(([k, a]) => `<option value="${k}">${actLabel({ type: k }, s)}</option>`).join('')}</select><button class="btn pri" data-act="addAct">${IC.plus} عند <bdi dir="ltr">${fmt(RT.t)}s</bdi></button></div></section>`;
+  return `<section><h3>الحركة في الزمن</h3><p class="note">كل حركة تبدأ في ثانية محددة وتظهر في التايم لاين باسم الشخصية. للمشي: اضغط مطولًا على الأرض في «عين المخرج»، أو اسحب الدائرة الزرقاء لتغيير الوجهة.</p>${rows}
+  <div class="addact"><select id="actType" aria-label="نوع الحركة">${ACT_GROUPS.map(([g, ar]) => { const l = types.filter(([, a]) => a.g === g); return l.length ? `<optgroup label="${ar}">${l.map(([k]) => `<option value="${k}">${actLabel({ type: k }, s)}</option>`).join('')}</optgroup>` : ''; }).join('')}</select><button class="btn pri" data-act="addAct">${IC.plus} عند <bdi dir="ltr">${fmt(RT.t)}s</bdi></button></div></section>`;
 }
 function pProps() {
   const ps = ST.items.filter(s => s.kind === 'prop'), s = itemById(RT.sel), isP = s && s.kind === 'prop';
@@ -297,11 +302,11 @@ function updTransport() {
   $('#tcTot').textContent = fmt(totalDur()); $('#tcBig').textContent = fmt(RT.t);
   $('#bUndo').disabled = HIST.i <= 0; $('#bRedo').disabled = HIST.i >= HIST.s.length - 1;
 }
-function play(from0) { if (!ST.shots.length) return toast('أضف لقطة أولًا'); RT.src = 'edit'; RT.quiz = null; RT.camPrevOn = false; if (from0 || RT.t >= totalDur() - .02) RT.t = 0; RT.playing = true; RT.view = 'cam'; RT.lastShot = -1; updTransport(); RT.dirty = true; }
-function pause() { RT.playing = false; updTransport(); if (TAB === 'cast' || TAB === 'props') renderPanel(); }
+function play(from0) { if (!ST.shots.length) return toast('أضف لقطة أولًا'); closePop(); hideCtx(); RT.src = 'edit'; RT.quiz = null; RT.camPrevOn = false; if (from0 || RT.t >= totalDur() - .02) RT.t = 0; RT.playing = true; RT.view = 'cam'; RT.lastShot = -1; updTransport(); renderSUI(); RT.dirty = true; }
+function pause() { RT.playing = false; updTransport(); renderSUI(); if (TAB === 'cast' || TAB === 'props') renderPanel(); }
 function jumpCut(d) { const st = shotStarts().concat([totalDur()]); RT.src = 'edit'; let t = RT.t; if (d > 0) t = st.find(x => x > RT.t + .01) ?? totalDur(); else t = [...st].reverse().find(x => x < RT.t - .05) ?? 0; RT.t = Math.min(t, Math.max(0, totalDur() - .001)); RT.dirty = true; updPH(true); }
-function setView(v) { RT.view = v; updTransport(); RT.dirty = true; hint(v === 'dir' ? 'عين المخرج: اسحب للدوران، انقر على شخصية أو عنصر لتحديده واسحبه لتحريكه، وانقر مرتين على الأرض لتوسيط المنظر.' : 'عين الكاميرا: اسحب داخل الكادر لتدوير الكاميرا حول الهدف.'); }
-function cine(on) { document.body.classList.toggle('cine', on); if (on) { RT.prevView = RT.view; RT.view = 'cam'; play(true); $('#bCine').innerHTML = `${IC.cine}<span class="lt">خروج</span>`; } else { RT.view = RT.prevView || 'cam'; $('#bCine').innerHTML = `${IC.cine}<span class="lt">عرض</span>`; } updTransport(); setTimeout(onResize, 30); }
+function setView(v) { RT.view = v; updTransport(); renderSUI(); RT.dirty = true; hint(v === 'dir' ? 'عين المخرج: انقر على عنصر لتحديده، اسحب السهم البرتقالي لتدويره، واضغط مطولًا على الأرض ليمشي إليها.' : 'عين الكاميرا: انقر على عنصر لتحديده، واسحب داخل الكادر لتدوير الكاميرا.', 4200, 'view-' + v); }
+function cine(on) { document.body.classList.toggle('cine', on); if (on) { RT.prevView = RT.view; RT.view = 'cam'; play(true); hint('اضغط زر الرجوع أو Esc للخروج', 2500, 'cine'); } else { RT.view = RT.prevView || 'cam'; renderSUI(); } updTransport(); setTimeout(onResize, 30); }
 
 /* ---------- monitor overlays (called after each draw) ---------- */
 window.onDrawn = (R, pc) => {
@@ -322,9 +327,17 @@ window.onDrawn = (R, pc) => {
   updPH(); if (window.posCtx) posCtx();
 };
 window.onSwapView = () => setView(RT.view === 'cam' ? 'dir' : 'cam');
-window.onSelectItem = id => { RT.sel = id; RT.ctxCam = null; if (window.renderCtx) renderCtx(); if (id) { const s = itemById(id); const tab = s.kind === 'prop' ? 'props' : 'cast'; if (TAB !== tab) switchTab(tab); else renderPanel(); } else if (TAB === 'cast' || TAB === 'props') renderPanel(); renderTL(); RT.dirty = true; };
-window.onSelectCam = id => { RT.cam = id; RT.src = id; RT.playing = false; RT.sel = null; RT.ctxCam = id; switchTab('cams'); updTransport(); if (window.renderCtx) renderCtx(); RT.dirty = true; };
+window.onSelectItem = id => { RT.sel = id; RT.ctxCam = null; if (!id) RT.selAct = null; renderCtx(true); if (id) { const s = itemById(id); const tab = s.kind === 'prop' ? 'props' : 'cast'; if (TAB !== tab) switchTab(tab); else renderPanel(); } else if (TAB === 'cast' || TAB === 'props') renderPanel(); renderTL(); RT.dirty = true; };
+window.onSelectCam = id => { RT.cam = id; RT.src = id; RT.playing = false; RT.sel = null; RT.ctxCam = id; if (!stageOn()) switchTab('cams'); updTransport(); renderCtx(true); RT.dirty = true; };
 window.onItemMoved = () => commit();
+window.onLongPressGround = g => {
+  const s = itemById(RT.sel); if (!s) return;
+  const t0 = +RT.t.toFixed(2), st = evalItem(s, t0), dist = Math.hypot(g.x - st.x, g.z - st.z); if (dist < .25) return;
+  const run = dist > 7, a = { type: run ? 'run' : 'walk', t: t0, dur: +Math.max(.5, dist / (run ? 3.4 : 1.3)).toFixed(2), tx: +g.x.toFixed(2), tz: +g.z.toFixed(2) };
+  s.actions.push(a); RT.selAct = { id: s.id, ai: s.actions.length - 1 }; commit();
+  toast(`${s.name} ${run ? 'سيركض' : 'سيمشي'} إلى هنا ابتداءً من الثانية ${fmt(t0)}`); try { navigator.vibrate && navigator.vibrate(20); } catch (e) { }
+};
+window.onHandleTap = d => { if (d.type === 'tgtH') { RT.selAct = { id: d.id, ai: d.ai }; RT.dirty = true; renderTL(); toast('اسحب الدائرة لتغيير الوجهة'); } else toast('اسحب السهم لتدوير الاتجاه'); };
 window.onCamEdited = () => commit();
 window.onPickGround = g => {
   if (RT.pick && RT.pick.kind === 'aim') { const c = camById(RT.pick.cam); RT.pick = null; hideHint(); if (c) { aimCam(c, V3(g.x, 1.1, g.z)); RT.src = c.id; setView('cam'); commit(); toast('وُجّهت الكاميرا'); } return; }
@@ -348,17 +361,17 @@ function addItem(type) {
   const same = ST.items.filter(i => i.type === type).length; if (same) s.name += ' ' + (same + 1);
   ST.items.push(s); RT.sel = s.id;
   if (s.kind !== 'prop' && !ST.cams.length) { const c = newCam({ target: s.id, size: 'MS' }, 0); ST.cams.push(c); ST.shots.push({ id: nid('s'), cam: c.id, dur: 3, trans: 'cut' }); RT.cam = c.id; }
-  commit(); toast(`أُضيف «${s.name}» — اسحبه في عين المخرج لتغيير مكانه`);
+  commit(); renderCtx(true); toast(`أُضيف «${s.name}»: اسحبه في عين المخرج لتغيير مكانه`);
 }
 function addAction(s, type, tAt) {
-  const t0 = +(tAt == null ? RT.t : tAt).toFixed(2), st = evalItem(s, t0), a = { type, t: t0, dur: 1 };
-  const D = { walk: 2, run: 1.6, turn: .8, look: .6, wave: 1.6, raise: 1.2, phone: 1, point: .8, cross: .8, sit: 1.2, stand: 1 }; a.dur = D[type] || 1;
-  if (type === 'walk' || type === 'run') { const d = type === 'run' ? 5 : 2.5; a.tx = +(st.x + Math.sin(st.rot) * d).toFixed(2); a.tz = +(st.z + Math.cos(st.rot) * d).toFixed(2); a.dur = type === 'run' ? 1.5 : 2; }
-  if (type === 'turn') a.v = 90; if (type === 'look') a.v = 60;
+  const t0 = +(tAt == null ? RT.t : tAt).toFixed(2), st = evalItem(s, t0), a = { type, t: t0, dur: ACT_DUR[type] || 1 };
+  if (type === 'walk' || type === 'run') { const d = type === 'run' ? 5 : 2.5; a.tx = +(st.x + Math.sin(st.rot) * d).toFixed(2); a.tz = +(st.z + Math.cos(st.rot) * d).toFixed(2); }
+  if (type === 'turn') a.v = 90; if (type === 'look') a.v = 60; if (type === 'eyes') a.v = 1;
   s.actions.push(a); const ai = s.actions.length - 1; RT.sel = s.id; RT.selAct = { id: s.id, ai }; commit();
-  if (type === 'walk' || type === 'run') { RT.pick = { id: s.id, ai }; setView('dir'); hint('انقر على الأرض لتحديد وجهة الحركة', 0); renderPanel(); }
+  if (type === 'walk' || type === 'run') showPath(s.id, ai);
   return ai;
 }
+function showPath(id, ai) { RT.sel = id; RT.selAct = { id, ai }; if (RT.view !== 'dir') setView('dir'); RT.dirty = true; renderTL(); toast('اسحب الدائرة الزرقاء على الأرض لتحديد إلى أين يذهب'); }
 function delItem(id) {
   let fz = 0; ST.cams.forEach(c => { if (c.mode !== 'free' && c.target === id) { if (freezeCam(c)) fz++; } if (c.other === id) { c.other = null; if (c.mode !== 'free') c.mode = 'single'; } });
   ST.items = ST.items.filter(s => s.id !== id); RT.sel = null; commit(); if (window.renderCtx) renderCtx();
@@ -424,6 +437,8 @@ function onPanelClick(e) {
   switch (A) {
     case 'env': ST.env = v; ST.light = ENVS[v].light; fitOrbit(); commit(); break;
     case 'light': ST.light = v; commit(); break;
+    case 'weather': ST.weather = v; commit(); break;
+    case 'showPath': if (sel) showPath(sel.id, +b.dataset.ai); break;
     case 'aspect': ST.aspect = v; commit(); break;
     case 'ov': ST.ov[v] = ST.ov[v] ? 0 : 1; commit(); break;
     case 'bdDel': RT.bdImg = null; ST.bd = null; setBackdrop(null); try { localStorage.removeItem(KEY + '-bd'); } catch (e) { } commit(); break;
@@ -441,7 +456,7 @@ function onPanelClick(e) {
     case 'del': if (sel) delItem(sel.id); break;
     case 'addAct': if (sel) addAction(sel, $('#actType').value); break;
     case 'delAct': if (sel) { sel.actions.splice(+b.dataset.ai, 1); RT.pick = null; commit(); } break;
-    case 'pickAct': if (sel) { RT.pick = { id: sel.id, ai: +b.dataset.ai }; setView('dir'); hint('انقر على الأرض لتحديد وجهة الحركة', 0); renderPanel(); } break;
+    case 'pickAct': if (sel) showPath(sel.id, +b.dataset.ai); break;
     case 'selCam': RT.cam = v; RT.src = v; RT.playing = false; RT.quiz = null; updTransport(); renderPanel(); RT.dirty = true; break;
     case 'newCam': { const tg = sel && sel.kind !== 'prop' ? sel : (cam ? itemById(cam.target) : ST.items.find(s => s.kind === 'human') || ST.items[0]); if (!tg) { toast('أضف شخصية أولًا'); break; } const c = newCam({ target: tg.id, size: 'MCU', side: 30 }); ST.cams.push(c); RT.cam = c.id; RT.src = c.id; commit(); break; }
     case 'dupCam': if (cam) { const c = JSON.parse(JSON.stringify(cam)); c.id = nid('c'); c.name = camName(ST.cams.length); ST.cams.push(c); RT.cam = c.id; RT.src = c.id; commit(); } break;
@@ -502,20 +517,20 @@ function bindAll() {
   $('#mb').addEventListener('click', onPanelClick);
   $('#mx').addEventListener('click', closeModal); $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('#bUndo').innerHTML = IC.undo; $('#bRedo').innerHTML = IC.redo; $('#bBoard').innerHTML = `${IC.board}<span class="lt">لوحة القصة</span>`;
-  $('#bStart').innerHTML = IC.start; $('#bPrev').innerHTML = IC.prev; $('#bNext').innerHTML = IC.next; $('#bLoop').innerHTML = IC.loop; $('#bCine').innerHTML = `${IC.cine}<span class="lt">عرض</span>`;
+  $('#bStart').innerHTML = IC.start; $('#bPrev').innerHTML = IC.prev; $('#bNext').innerHTML = IC.next; $('#bLoop').innerHTML = IC.loop; $('#bCine').innerHTML = `${IC.cine}<span class="lt">تكبير</span>`; $('#bCine').setAttribute('aria-label', 'الشاشة الكاملة للتحكم');
   $('#bUndo').onclick = undo; $('#bRedo').onclick = redo; $('#bBoard').onclick = storyboard; $('#bExport').innerHTML = `${IC.film}<span class="lt">تصدير فيديو</span>`; $('#bExport').onclick = () => openExport();
   $('#bPlay').onclick = () => RT.playing ? pause() : play();
   $('#bStart').onclick = () => { RT.t = 0; RT.src = 'edit'; RT.dirty = true; updPH(true); };
   $('#bPrev').onclick = () => jumpCut(-1); $('#bNext').onclick = () => jumpCut(1);
   $('#bLoop').onclick = () => { RT.loop = !RT.loop; updTransport(); };
   $('#bView').onclick = () => setView(RT.view === 'cam' ? 'dir' : 'cam');
-  $('#bCine').onclick = () => cine(!document.body.classList.contains('cine'));
+  $('#bCine').onclick = () => stageOn() ? exitStage() : enterStage(); bindSUI();
   $('#srcBack').onclick = () => { RT.src = 'edit'; RT.camPrevOn = false; RT.dirty = true; if (TAB === 'cams') renderPanel(); };
   bindTL(); if (window.bindCtx) bindCtx();
-  window.kadrBack = () => { if (!$('#modal').hidden) { closeModal(); return true; } if (window.closePop && closePop()) return true; if (document.body.classList.contains('cine')) { cine(false); return true; } if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); return true; } return false; };
+  window.kadrBack = () => { if (!$('#modal').hidden) { closeModal(); return true; } if (window.closePop && closePop()) return true; if (document.body.classList.contains('cine')) { cine(false); return true; } if (stageOn()) { exitStage(); return true; } if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); return true; } return false; };
   document.addEventListener('keydown', e => {
     if (e.target.closest('input,select,textarea')) return;
-    if (e.key === 'Escape') { if (window.closePop && closePop()) return; if (!$('#modal').hidden) closeModal(); else if (document.body.classList.contains('cine')) cine(false); else if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); } }
+    if (e.key === 'Escape') { if (window.closePop && closePop()) return; if (!$('#modal').hidden) closeModal(); else if (document.body.classList.contains('cine')) cine(false); else if (stageOn()) exitStage(); else if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); } }
     else if (e.key === ' ') { e.preventDefault(); RT.playing ? pause() : play(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { RT.t = clamp(RT.t + (e.key === 'ArrowRight' ? 1 : -1) / 24, 0, tlLen()); RT.dirty = true; updPH(true); }

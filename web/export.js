@@ -65,7 +65,7 @@ function drawOverlay(cx, pf, t, W, H) {
   cx.restore();
 }
 function drawExportFrame(r2, cam, cx, t, W, H) {
-  const pf = programFrame(t); applyAll(t); placeBackdrop(pf.R);
+  const pf = programFrame(t); applyAll(t); placeBackdrop(pf.R); weatherTick(t, pf.R);
   cx.globalAlpha = 1; cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
   const shoot = R => { composeCam(cam, R); cam.aspect = W / H; cam.updateProjectionMatrix(); r2.render(scene, cam); };
   if (pf.R) { shoot(pf.R); cx.drawImage(r2.domElement, 0, 0, W, H); }

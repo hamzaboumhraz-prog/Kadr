@@ -3,8 +3,8 @@
 تطبيق لتعلّم اللغة السينمائية: ابنِ المشهد، ضع الكاميرا، ركّب اللقطات، وصدّر المونتاج فيديو.
 من إنتاج OSLOB Studio.
 
-- **النسخة على الويب (هاتف وحاسوب):** https://hamzaboumhraz-prog.github.io/kadr/
-- **تطبيق أندرويد (APK):** https://github.com/hamzaboumhraz-prog/kadr/releases/latest/download/kadr.apk
+- **النسخة على الويب (هاتف وحاسوب):** https://hamzaboumhraz-prog.github.io/Kadr/
+- **تطبيق أندرويد (APK):** https://github.com/hamzaboumhraz-prog/Kadr/releases/latest/download/kadr.apk
 
 ## كيف يعمل المستودع
 

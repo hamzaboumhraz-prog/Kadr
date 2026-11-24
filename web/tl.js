@@ -42,6 +42,7 @@ function updPH(force) {
   ph.style.transform = `translateX(${x}px)`;
   const sc = $('#tsc'); if (sc && RT.playing) { const lw = LABW(); if (x < sc.scrollLeft + lw + 10 || x > sc.scrollLeft + sc.clientWidth - 30) sc.scrollLeft = x - lw - 30; }
   $('#tcBig').textContent = fmt(RT.t);
+  if (stageOn()) { const r = $('#suiT'), c = $('#suiTc'); if (r && document.activeElement !== r) r.value = RT.t; if (c) c.textContent = fmt(RT.t) + 's'; }
   const sp = document.querySelector('[data-tb="split"]'); if (sp) { const sa = shotAt(RT.t); sp.disabled = !(sa && RT.t - sa.start > .15 && sa.start + sa.s.dur - RT.t > .15); }
 }
 function snapT(t, skip, len) {
@@ -153,6 +154,7 @@ function placePop(anchor) {
 }
 function popAnchor(f) {
   if (f.anchor === 'ctx') return document.querySelector('#ctx [data-cx="act"]');
+  if (f.kind === 'add') return document.querySelector('#sui [data-sui="add"]');
   if (f.kind === 'shot') { const i = ST.shots.findIndex(s => s.id === f.id); return i >= 0 ? document.querySelector(`#tin .clip[data-shot="${i}"]`) : null; }
   if (f.kind === 'act' || (f.kind === 'type' && f.ai != null)) return document.querySelector(`#tin .act[data-item="${f.id}"][data-ai="${f.ai}"]`);
   if (f.kind === 'type' && f.after != null) return document.querySelector(`#tin .act[data-item="${f.id}"][data-ai="${f.after}"]`);
@@ -160,28 +162,35 @@ function popAnchor(f) {
 }
 function reopenPop() {
   const f = RT.popFor, p = $('#pop'); if (!f) { p.hidden = true; return; }
-  const el = popAnchor(f), html = f.kind === 'act' ? actPop(f) : f.kind === 'shot' ? shotPop(f) : typePop(f);
+  const el = popAnchor(f), html = f.kind === 'act' ? actPop(f) : f.kind === 'shot' ? shotPop(f) : f.kind === 'add' ? addPop() : typePop(f);
   if (!el || !html) { p.hidden = true; RT.popFor = null; return; }
   p.innerHTML = html; p.hidden = false; placePop(el);
+}
+const PX = '<button class="px" data-pa="close" aria-label="إغلاق">×</button>';
+function addPop() {
+  const g = (t, list) => `<div class="pgh">${t}</div><div class="pg">${list}</div>`;
+  return `<div class="pt">أضف إلى المشهد${PX}</div>` + g('شخصيات', Object.entries(CAST).map(([k, c]) => `<button class="pb" data-pa="addItem" data-v="${k}">${c.ar}</button>`).join('')) + g('حيوانات', Object.entries(ANIMALS).map(([k, c]) => `<button class="pb" data-pa="addItem" data-v="${k}">${c.ar}</button>`).join('')) + g('عناصر', Object.entries(PROPS).map(([k, c]) => `<button class="pb" data-pa="addItem" data-v="${k}">${c.ar}</button>`).join(''));
 }
 function actPop(f) {
   const s = itemById(f.id), a = s && s.actions[f.ai]; if (!a) return '';
   let extra = '';
-  if (a.type === 'walk' || a.type === 'run') extra = `<button class="pb" data-pa="aPick">${IC.pin}<span>الوجهة</span></button>`;
+  if (a.type === 'walk' || a.type === 'run') extra = `<button class="pb" data-pa="aPick">${IC.pin}<span>عدّل الوجهة</span></button>`;
+  if (a.type === 'eyes') extra = `<select data-ps="v" aria-label="الاتجاه">${selOpts([[0, 'إلى الأمام'], [-1, 'يمينًا'], [1, 'يسارًا'], [2, 'إلى الأعلى'], [-2, 'إلى الأسفل']], a.v == null ? 1 : a.v)}</select>`;
   if (a.type === 'turn') extra = `<select data-ps="v" aria-label="الاتجاه">${selOpts([[-180, 'استدارة كاملة'], [-90, 'يمينًا 90°'], [-45, 'يمينًا 45°'], [45, 'يسارًا 45°'], [90, 'يسارًا 90°']], a.v == null ? 90 : a.v)}</select>`;
   if (a.type === 'look') extra = `<select data-ps="v" aria-label="الاتجاه">${selOpts([[-70, 'إلى اليمين'], [-30, 'قليلًا يمينًا'], [0, 'إلى الأمام'], [30, 'قليلًا يسارًا'], [70, 'إلى اليسار']], a.v == null ? 60 : a.v)}</select>`;
-  return `<div class="pt"><b>${esc(s.name)}</b> · ${actLabel(a, s)} <bdi dir="ltr">${fmt(a.t)}s</bdi></div>
+  return `<div class="pt"><b>${esc(s.name)}</b> · ${actLabel(a, s)} <bdi dir="ltr">${fmt(a.t)}s</bdi>${PX}</div>
   <div class="pr"><button class="pb sq" data-pa="aDur" data-v="-0.2" aria-label="أقصر">${IC.minus}</button><bdi dir="ltr" class="pv">${fmt(a.dur)}s</bdi><button class="pb sq" data-pa="aDur" data-v="0.2" aria-label="أطول">${IC.plus}</button>${extra}</div>
   <div class="pr"><button class="pb" data-pa="aType">${IC.edit}<span>النوع</span></button><button class="pb" data-pa="aAfter">${IC.plus}<span>بعدها</span></button><button class="pb" data-pa="aDup">${IC.copy}<span>نسخ</span></button><button class="pb danger" data-pa="aDel">${IC.trash}<span>حذف</span></button></div>`;
 }
 function typePop(f) {
   const s = itemById(f.id); if (!s) return '';
   const cur = f.ai != null && s.actions[f.ai] ? s.actions[f.ai].type : null;
-  return `<div class="pt">${f.ai != null ? 'غيّر الحركة' : `حركة جديدة لـ<b>${esc(s.name)}</b>`} <bdi dir="ltr">${fmt(f.t)}s</bdi></div><div class="pg">${actTypesFor(s).map(([k]) => `<button class="pb${k === cur ? ' on' : ''}" data-pa="pickType" data-v="${k}">${actLabel({ type: k }, s)}</button>`).join('')}</div>`;
+  const types = actTypesFor(s), groups = ACT_GROUPS.map(([g, ar]) => [ar, types.filter(([, a]) => a.g === g)]).filter(([, l]) => l.length);
+  return `<div class="pt">${f.ai != null ? 'غيّر الحركة' : `حركة جديدة لـ<b>${esc(s.name)}</b>`} <bdi dir="ltr">${fmt(f.t)}s</bdi>${PX}</div>${groups.map(([ar, l]) => `<div class="pgh">${ar}</div><div class="pg">${l.map(([k]) => `<button class="pb${k === cur ? ' on' : ''}" data-pa="pickType" data-v="${k}">${actLabel({ type: k }, s)}</button>`).join('')}</div>`).join('')}`;
 }
 function shotPop(f) {
   const i = ST.shots.findIndex(s => s.id === f.id), sh = ST.shots[i]; if (!sh) return ''; const st = shotStarts()[i];
-  return `<div class="pt">لقطة ${i + 1} <bdi dir="ltr">${fmt(st)}–${fmt(st + sh.dur)}s</bdi></div>
+  return `<div class="pt">لقطة ${i + 1} <bdi dir="ltr">${fmt(st)}–${fmt(st + sh.dur)}s</bdi>${PX}</div>
   <div class="pr wrap">${ST.cams.map((c, k) => `<button class="pb cam${c.id === sh.cam ? ' on' : ''}" data-pa="sCam" data-v="${c.id}"><i style="background:${CAM_COLORS[k % 8]}"></i><b>${esc(c.name)}</b><small>${sizeAr(c)}</small></button>`).join('')}</div>
   <div class="pr"><button class="pb sq" data-pa="sDur" data-v="-0.2" aria-label="أقصر">${IC.minus}</button><bdi dir="ltr" class="pv">${fmt(sh.dur)}s</bdi><button class="pb sq" data-pa="sDur" data-v="0.2" aria-label="أطول">${IC.plus}</button><select data-ps="trans" aria-label="الانتقال">${[['cut', 'قطع'], ['dissolve', 'مزج'], ['fade', 'تلاشٍ']].map(([k, v]) => `<option value="${k}"${(sh.trans || 'cut') === k ? ' selected' : ''}>${i === 0 && k !== 'cut' ? 'ظهور من الأسود' : v}</option>`).join('')}</select></div>
   <div class="pr"><button class="pb" data-pa="sSplit">${IC.scissors}<span>قصّ</span></button><button class="pb" data-pa="sEdit">${IC.cam}<span>الكاميرا</span></button><button class="pb" data-pa="sDup">${IC.copy}<span>نسخ</span></button><button class="pb danger" data-pa="sDel">${IC.trash}<span>حذف</span></button></div>`;
@@ -195,13 +204,15 @@ function bindPop() {
     const shI = f.kind === 'shot' ? ST.shots.findIndex(x => x.id === f.id) : -1, sh = ST.shots[shI];
     switch (A) {
       case 'aDur': if (a) { a.dur = +Math.max(.1, a.dur + +v).toFixed(2); commit(); } break;
-      case 'aPick': if (a) { RT.pick = { id: s.id, ai: f.ai }; closePop(); setView('dir'); hint('انقر على الأرض لتحديد وجهة الحركة', 0); } break;
+      case 'close': closePop(); break;
+      case 'addItem': closePop(); addItem(v); break;
+      case 'aPick': if (a) { showPath(s.id, f.ai); closePop(); } break;
       case 'aType': RT.popFor = { kind: 'type', id: f.id, ai: f.ai, t: a.t }; reopenPop(); break;
       case 'aAfter': RT.popFor = { kind: 'type', id: f.id, t: +(a.t + a.dur).toFixed(2), after: f.ai }; reopenPop(); break;
       case 'aDup': if (a) { const c = Object.assign({}, a, { t: +(a.t + a.dur).toFixed(2) }); s.actions.push(c); RT.selAct = { id: s.id, ai: s.actions.length - 1 }; RT.popFor = { kind: 'act', id: s.id, ai: s.actions.length - 1 }; commit(); } break;
       case 'aDel': if (a) { s.actions.splice(f.ai, 1); RT.selAct = null; closePop(); commit(); } break;
       case 'pickType': {
-        if (f.ai != null && a) { a.type = v; if (v === 'turn' && a.v == null) a.v = 90; if (v === 'look' && a.v == null) a.v = 60; if ((v === 'walk' || v === 'run') && a.tx == null) { const st0 = evalItem(s, a.t); a.tx = +(st0.x + Math.sin(st0.rot) * 2.5).toFixed(2); a.tz = +(st0.z + Math.cos(st0.rot) * 2.5).toFixed(2); } RT.popFor = { kind: 'act', id: s.id, ai: f.ai }; commit(); }
+        if (f.ai != null && a) { a.type = v; a.dur = ACT_DUR[v] || a.dur; if (v === 'turn') a.v = 90; if (v === 'look') a.v = 60; if (v === 'eyes') a.v = 1; if ((v === 'walk' || v === 'run') && a.tx == null) { const st0 = evalItem(s, a.t); a.tx = +(st0.x + Math.sin(st0.rot) * 2.5).toFixed(2); a.tz = +(st0.z + Math.cos(st0.rot) * 2.5).toFixed(2); } RT.popFor = { kind: 'act', id: s.id, ai: f.ai }; commit(); }
         else if (s) { RT.popFor = null; closePop(); const ai = addAction(s, v, f.t); if (ai != null && v !== 'walk' && v !== 'run') { RT.selAct = { id: s.id, ai }; RT.popFor = { kind: 'act', id: s.id, ai }; reopenPop(); } }
         break;
       }
@@ -218,19 +229,23 @@ function bindPop() {
     if (el.dataset.ps === 'trans') { const sh = ST.shots.find(x => x.id === f.id); if (sh) { sh.trans = el.value; commit(); } }
     if (el.dataset.ps === 'v') { const s = itemById(f.id), a = s && s.actions[f.ai]; if (a) { a.v = +el.value; commit(); } }
   });
-  document.addEventListener('pointerdown', e => { if (!p.hidden && !e.target.closest('#pop,#tin .act,#tin .clip,[data-add],[data-tb="addAct"],#ctx')) closePop(); }, true);
+  document.addEventListener('pointerdown', e => { if (!p.hidden && !e.target.closest('#pop,#tin .act,#tin .clip,[data-add],[data-tb="addAct"],#ctx,[data-sui="add"]')) closePop(); }, true);
   addEventListener('resize', () => { if (RT.popFor) reopenPop(); });
   addEventListener('scroll', () => { if (RT.popFor) reopenPop(); }, { passive: true });
 }
 
 /* ---------- floating toolbar on the monitor ---------- */
-function renderCtx() {
+let ctxT = null;
+function armCtx() { clearTimeout(ctxT); ctxT = setTimeout(() => { const el = $('#ctx'); if (el && !(RT.popFor && RT.popFor.anchor === 'ctx')) el.classList.add('gone'); }, 4500); }
+function hideCtx() { clearTimeout(ctxT); const el = $('#ctx'); if (el) el.classList.add('gone'); }
+function renderCtx(show) {
   const el = $('#ctx'), s = RT.sel && itemById(RT.sel), c = !s && RT.ctxCam && camById(RT.ctxCam);
-  if (!s && !c) { el.hidden = true; return; }
+  if (!s && !c) { el.hidden = true; clearTimeout(ctxT); return; }
   const b = (k, ic, t, cls) => `<button data-cx="${k}" class="${cls || ''}" title="${t}" aria-label="${t}">${ic}<span>${t}</span></button>`;
   el.innerHTML = s
-    ? `<b class="cn">${esc(s.name)}</b>${b('rotL', IC.rotL, 'تدوير')}${b('rotR', IC.rotR, 'تدوير')}${b('smaller', IC.minus, 'أصغر')}${b('bigger', IC.plus, 'أكبر')}${b('act', IC.walk, 'حركة')}${b('dup', IC.copy, 'نسخ')}${b('edit', IC.edit, 'تعديل')}${b('del', IC.trash, 'حذف', 'danger')}${b('close', IC.x, 'إغلاق')}`
-    : `<b class="cn">الكاميرا ${esc(c.name)}</b>${b('cView', IC.cam, 'عرض')}${b('cShot', IC.plus, 'لقطة')}${b('cEdit', IC.edit, 'تعديل')}${b('cDup', IC.copy, 'نسخ')}${b('cDel', IC.trash, 'حذف', 'danger')}${b('close', IC.x, 'إغلاق')}`;
+    ? `<b class="cn">${esc(s.name)}</b>${b('smaller', IC.minus, 'أصغر')}${b('bigger', IC.plus, 'أكبر')}${b('rot', IC.rotR, 'تدوير')}${b('act', IC.walk, 'حركة')}${b('dup', IC.copy, 'نسخ')}${b('del', IC.trash, 'حذف', 'danger')}`
+    : `<b class="cn">الكاميرا ${esc(c.name)}</b>${b('cView', IC.cam, 'عرض')}${b('cShot', IC.plus, 'لقطة')}${b('cDup', IC.copy, 'نسخ')}${b('cDel', IC.trash, 'حذف', 'danger')}`;
+  if (show) { el.classList.remove('gone'); armCtx(); } else if (el.hidden) el.classList.add('gone');
   el.hidden = false; posCtx();
 }
 const _pv = new THREE.Vector3();
@@ -253,11 +268,10 @@ function posCtx() {
 }
 function bindCtx() {
   $('#ctx').addEventListener('click', e => {
-    const b = e.target.closest('[data-cx]'); if (!b) return; e.stopPropagation();
+    const b = e.target.closest('[data-cx]'); if (!b) return; e.stopPropagation(); armCtx();
     const s = itemById(RT.sel), c = camById(RT.ctxCam), k = b.dataset.cx;
     if (s) switch (k) {
-      case 'rotL': s.rot = Math.round(((s.rot || 0) + 15 + 540) % 360 - 180); commit(); break;
-      case 'rotR': s.rot = Math.round(((s.rot || 0) - 15 + 540) % 360 - 180); commit(); break;
+      case 'rot': s.rot = Math.round(((s.rot || 0) - 45 + 540) % 360 - 180); commit(); break;
       case 'smaller': if (s.kind === 'human') s.h = clamp(s.h - 5, 50, 215); else s.scale = +clamp((s.scale || 1) / 1.12, .2, 6).toFixed(2); commit(); break;
       case 'bigger': if (s.kind === 'human') s.h = clamp(s.h + 5, 50, 215); else s.scale = +clamp((s.scale || 1) * 1.12, .2, 6).toFixed(2); commit(); break;
       case 'act': RT.popFor = { kind: 'type', id: s.id, t: +RT.t.toFixed(1), anchor: 'ctx' }; reopenPop(); break;
@@ -276,4 +290,49 @@ function bindCtx() {
     }
     else if (k === 'close') { RT.ctxCam = null; renderCtx(); }
   });
+}
+
+/* ---------- full-screen editing (stage) ---------- */
+function stageOn() { return document.body.classList.contains('stage'); }
+function enterStage() {
+  document.body.classList.add('stage'); closePop(); renderSUI(); setTimeout(onResize, 40);
+  try { if (!window.AndroidBridge && !inFrame() && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().then(() => { try { screen.orientation.lock('landscape').catch(() => { }); } catch (e) { } }).catch(() => { }); } catch (e) { }
+  hint('كل التحكم هنا: اسحب العناصر والأسهم، واضغط مطولًا على الأرض لتمشي الشخصية المختارة إليها.', 4500, 'stage');
+}
+function exitStage() { document.body.classList.remove('stage'); closePop(); try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { } setTimeout(onResize, 40); renderAll(); }
+function renderSUI() {
+  const el = $('#sui'); if (!el) return; if (!stageOn()) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="st-top"><button class="sbtn" data-sui="exit" aria-label="خروج من الشاشة الكاملة">${IC.x}</button>
+  <div class="seg"><button data-sui="cam" class="${RT.view === 'cam' ? 'on' : ''}">${IC.cam}<span>الكاميرا</span></button><button data-sui="dir" class="${RT.view === 'dir' ? 'on' : ''}">${IC.dir}<span>المخرج</span></button></div>
+  <div class="st-r"><button class="sbtn" data-sui="undo" aria-label="تراجع">${IC.undo}</button><button class="sbtn" data-sui="cine" aria-label="عرض سينمائي">${IC.film}</button></div></div>
+  <div class="st-bot"><button class="sbtn pl" data-sui="play" aria-label="${RT.playing ? 'إيقاف' : 'تشغيل'}">${RT.playing ? IC.pause : IC.play}</button>
+  <input type="range" id="suiT" min="0" max="${tlLen().toFixed(2)}" step="0.01" value="${RT.t}" aria-label="الزمن"><span class="stc" dir="ltr" id="suiTc">${fmt(RT.t)}s</span>
+  <div class="scams"><button data-sui="src" data-v="edit" class="${RT.src === 'edit' ? 'on' : ''}">المونتاج</button>${ST.cams.map((c, i) => `<button data-sui="src" data-v="${c.id}" class="${RT.src === c.id ? 'on' : ''}"><i style="background:${CAM_COLORS[i % 8]}"></i>${esc(c.name)}</button>`).join('')}</div>
+  <button class="sbtn add" data-sui="add">${IC.plus}<span>إضافة</span></button></div>${camStrip()}`;
+}
+function camStrip() {
+  const c = RT.src !== 'edit' && camById(RT.src); document.body.classList.toggle('camstrip', !!c && stageOn()); if (!c) return '';
+  const sel = (f, list, cur) => `<select data-sc="${f}" aria-label="${f}">${list.map(([k, v]) => `<option value="${k}"${String(k) === String(cur) ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
+  const free = c.mode === 'free';
+  return `<div class="st-cam"><b>الكاميرا ${esc(c.name)}</b>${free ? '' : sel('size', SIZES.map(x => [x.k, x.ar]), c.size) + sel('angle', ANGLES.map(x => [x.k, x.ar]), c.angle)}${sel('lens', LENSES.map(x => [x, x + 'mm']), c.lens)}${sel('move', MOVES.filter(m => !(free && m.k === 'track')).map(x => [x.k, x.ar]), c.move)}<button class="sbtn" data-sui="shot">${IC.plus}<span>لقطة</span></button></div>`;
+}
+function bindSUI() {
+  const el = $('#sui');
+  el.addEventListener('pointerdown', e => e.stopPropagation());
+  el.addEventListener('click', e => {
+    const b = e.target.closest('[data-sui]'); if (!b) return; e.stopPropagation();
+    switch (b.dataset.sui) {
+      case 'exit': exitStage(); break;
+      case 'cam': setView('cam'); renderSUI(); break;
+      case 'dir': setView('dir'); renderSUI(); break;
+      case 'undo': undo(); break;
+      case 'cine': cine(true); break;
+      case 'play': RT.playing ? pause() : play(); renderSUI(); break;
+      case 'src': RT.src = b.dataset.v; RT.quiz = null; RT.camPrevOn = false; if (RT.src !== 'edit') RT.cam = RT.src; setView('cam'); renderSUI(); RT.dirty = true; break;
+      case 'add': RT.popFor = { kind: 'add' }; reopenPop(); break;
+      case 'shot': { const c = camById(RT.src); if (c) { ST.shots.push({ id: nid('s'), cam: c.id, dur: 2.5, trans: 'cut' }); commit(); toast(`أُضيفت لقطة بالكاميرا ${c.name}`); } break; }
+    }
+  });
+  el.addEventListener('change', e => { const f = e.target.dataset.sc, c = camById(RT.src); if (f && c) { c[f] = f === 'lens' ? +e.target.value : e.target.value; commit(); } });
+  el.addEventListener('input', e => { if (e.target.id === 'suiT') { RT.t = +e.target.value; RT.playing = false; RT.dirty = true; updPH(true); } });
 }

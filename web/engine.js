@@ -2,7 +2,8 @@
 let ST = null;
 const RT = { t: 0, playing: false, loop: true, view: 'cam', src: 'edit', sel: null, selShot: null, pick: null, camPrevOn: false, camPrev: 0, dirty: true, quiz: null, flags: [], lastShot: -1, frameRect: { x: 0, y: 0, w: 1, h: 1 }, pipR: null, bdImg: null, R: null, pc: null };
 let renderer, scene, shotCam, dirCam, tmpCam, envG = null, envKey = null, envInfo = null, hemi, sun, LAMPS = [], ringM, axisL, pathL, frus, mixCtx, monEl, bdMesh = null;
-const OBJ = {}, GIZ = {};
+const OBJ = {}, GIZ = {}, HND = { rot: null, knobs: [] };
+let pathAll = null, rainL = null;
 const ORB = { tx: 0, ty: .9, tz: 0, r: 11, th: .75, ph: .5 };
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t, smooth = t => t * t * (3 - 2 * t);
@@ -44,6 +45,10 @@ function init3D() {
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(60 * 3), 3));
   pathL = new THREE.LineSegments(pg, new THREE.LineBasicMaterial({ color: '#79c4e6' })); pathL.layers.set(1); pathL.frustumCulled = false; scene.add(pathL);
   frus = frustumLines('#f2a23a'); scene.add(frus);
+  const pa = new THREE.BufferGeometry(); pa.setAttribute('position', new THREE.BufferAttribute(new Float32Array(240 * 3), 3));
+  pathAll = new THREE.LineSegments(pa, new THREE.LineBasicMaterial({ color: '#79c4e6', transparent: true, opacity: .35 })); pathAll.layers.set(1); pathAll.frustumCulled = false; scene.add(pathAll);
+  pathL.material = new THREE.LineBasicMaterial({ color: '#79c4e6', depthTest: false, transparent: true }); pathL.renderOrder = 11;
+  HND.rot = makeRotHandle(); scene.add(HND.rot);
   mixCtx = document.getElementById('mix').getContext('2d');
   new ResizeObserver(onResize).observe(monEl);
   onResize();
@@ -57,7 +62,13 @@ function onResize() {
 }
 
 /* ---------- environment & lighting ---------- */
-function disposeObj(r) { r.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material && m.material.map) m.material.map.dispose(); }); }
+function disposeObj(r) {
+  const keep = new Set(MC.values());
+  r.traverse(m => {
+    if (m.geometry) m.geometry.dispose();
+    (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => { if (!x) return; if (x.map) x.map.dispose(); if (!keep.has(x)) x.dispose(); });
+  });
+}
 function syncEnv() {
   if (envKey === ST.env && envG) return;
   if (envG) { scene.remove(envG); disposeObj(envG); }
@@ -68,8 +79,12 @@ function applyLight() {
   const L = LIGHTS[ST.light] || LIGHTS.day;
   hemi.color.set(L.hs); hemi.groundColor.set(L.hg); hemi.intensity = L.hi;
   sun.color.set(L.sc); sun.intensity = L.si; sun.position.set(L.sp[0] * 1.5, L.sp[1] * 1.5, L.sp[2] * 1.5); sun.target.position.set(0, 0, 0);
-  scene.background = new THREE.Color(L.sky);
-  scene.fog = envInfo && envInfo.fog ? new THREE.Fog(L.sky, envInfo.fog[0], envInfo.fog[1]) : null;
+  const wx = ST.weather || 'clear', sky = new THREE.Color(L.sky);
+  if (wx === 'fog') { sky.lerp(new THREE.Color('#c9c9c4'), .65); hemi.intensity *= .95; sun.intensity *= .55; }
+  if (wx === 'rain') { sky.lerp(new THREE.Color('#7f8a94'), .6); hemi.intensity *= .85; sun.intensity *= .4; }
+  scene.background = sky;
+  scene.fog = wx === 'fog' ? new THREE.Fog(sky, 2.5, 30) : wx === 'rain' ? new THREE.Fog(sky, 10, 70) : envInfo && envInfo.fog ? new THREE.Fog(sky, envInfo.fog[0], envInfo.fog[1]) : null;
+  ensureRain(wx === 'rain');
   const all = LAMPS.slice(); Object.values(OBJ).forEach(o => (o.lamps || []).forEach(l => all.push(l)));
   const cap = innerWidth < 700 ? 3 : 5, wp = new THREE.Vector3();
   if (envG) envG.updateMatrixWorld(true); Object.values(OBJ).forEach(o => o.root.updateMatrixWorld(true));
@@ -105,7 +120,8 @@ function syncItems() {
 }
 function blendPose(a, b, t) { for (const k in b) a[k] = lerp(a[k] || 0, b[k], t); }
 function evalItem(s, t) {
-  const st = { x: s.x, z: s.z, rot: (s.rot || 0) * D2R, pose: Object.assign({}, POSES[s.pose] || POSES.stand), gait: 0, gA: 0, run: 0, wave: 0, waveT: 0, hold: POSE_HOLD[s.pose] || null, moving: false };
+  const st = { x: s.x, z: s.z, rot: (s.rot || 0) * D2R, pose: Object.assign({}, POSES[s.pose] || POSES.stand), gait: 0, gA: 0, run: 0, wave: 0, waveT: 0, hold: POSE_HOLD[s.pose] || null, moving: false, jumpY: 0, crouch: 0, talk: 0, laugh: 0, nod: 0, shakeH: 0, clap: 0, gest: 0, dance: 0, bend: 0, gazeX: 0, gazeY: 0, fx: 0 };
+  const env = p => Math.max(0, Math.min(1, p * 6, (1 - p) * 6));
   const acts = (s.actions || []).slice().sort((a, b) => a.t - b.t);
   for (const a of acts) {
     if (t < a.t) break;
@@ -122,6 +138,16 @@ function evalItem(s, t) {
       case 'turn': st.rot += (a.v == null ? 90 : a.v) * D2R * e; break;
       case 'look': st.pose.neckY = lerp(st.pose.neckY, (a.v == null ? 60 : a.v) * D2R, e); break;
       case 'wave': if (p < 1) { st.wave = Math.pow(Math.sin(Math.PI * p), .3); st.waveT = el; } break;
+      case 'jump': if (p < 1) { const q = clamp((p - .15) / .7, 0, 1); st.jumpY = Math.sin(Math.PI * q) * .45; st.crouch = Math.max(0, 1 - p / .15) * (p < .15 ? Math.sin(Math.PI * p / .15) : 0) + (p > .85 ? Math.sin(Math.PI * (p - .85) / .15) : 0); } break;
+      case 'talk': if (p < 1) { st.talk = Math.max(st.talk, env(p)); st.fx = el; } break;
+      case 'laugh': if (p < 1) { st.laugh = env(p); st.fx = el; } break;
+      case 'nod': if (p < 1) { st.nod = env(p); st.fx = el; } break;
+      case 'shake': if (p < 1) { st.shakeH = env(p); st.fx = el; } break;
+      case 'clap': if (p < 1) { st.clap = env(p); st.fx = el; } break;
+      case 'gesture': if (p < 1) { st.gest = env(p); st.talk = Math.max(st.talk, env(p)); st.fx = el; } break;
+      case 'dance': if (p < 1) { st.dance = env(p); st.fx = el; } break;
+      case 'bend': if (p < 1) st.bend = Math.sin(Math.PI * p); break;
+      case 'eyes': { const v = a.v == null ? 1 : a.v, gx = Math.abs(v) === 1 ? v : 0, gy = v === 2 ? 1 : v === -2 ? -1 : 0, k = smooth(clamp(p * 3, 0, 1)); st.gazeX = lerp(st.gazeX, gx, k); st.gazeY = lerp(st.gazeY, gy, k); break; }
       default: {
         const pk = ACTS[a.type] && ACTS[a.type].pose;
         if (pk) { const ny = st.pose.neckY, bp = a.type === 'raise' ? smooth(clamp(p / .55, 0, 1)) : e; blendPose(st.pose, POSES[pk], bp); st.pose.neckY = ny; if (bp > .6) st.hold = POSE_HOLD[pk] || null; else if (bp > .4 && !POSE_HOLD[pk]) st.hold = null; }
@@ -141,8 +167,20 @@ function setPose(o, P) {
   r.lKnee.rotation.set(P.lKnee, 0, 0); r.rKnee.rotation.set(P.rKnee, 0, 0);
   r.body.rotation.x = -Math.PI / 2 * P.lie; r.body.position.y = P.lie * (.5 / o.sc + .14);
 }
-function poseHuman(o, st) {
-  const P = Object.assign({}, st.pose), r = o.rig;
+function blinkAt(t, seed) { const per = 3.1 + (seed % 7) * .27, ph = ((t + seed * .37) % per + per) % per; return ph < .14 ? Math.sin(ph / .14 * Math.PI) : 0; }
+function poseHuman(o, st, t) {
+  const P = Object.assign({}, st.pose), r = o.rig, T = st.fx;
+  if (st.bend > 0) blendPose(P, POSES.bend, st.bend);
+  if (st.crouch > 0) { P.lKnee += .9 * st.crouch; P.rKnee += .9 * st.crouch; P.lHipX += .55 * st.crouch; P.rHipX += .55 * st.crouch; P.hipY -= .22 * st.crouch; P.spine += .25 * st.crouch; P.lShX -= .4 * st.crouch; P.rShX -= .4 * st.crouch; }
+  if (st.jumpY > 0) { P.lShX += 1.6 * st.jumpY; P.rShX += 1.6 * st.jumpY; P.lKnee += .5 * st.jumpY; P.rKnee += .5 * st.jumpY; }
+  if (st.gest > 0) { const g = st.gest; P.lShX = lerp(P.lShX, .55, g) + .22 * Math.sin(T * 4) * g; P.lEl = lerp(P.lEl, 1.35, g) + .3 * Math.sin(T * 5.2) * g; P.rShX = lerp(P.rShX, .65, g) + .22 * Math.sin(T * 4.6 + 1) * g; P.rEl = lerp(P.rEl, 1.45, g) + .3 * Math.sin(T * 5.7 + 1) * g; P.lShZ = lerp(P.lShZ, .3, g); P.rShZ = lerp(P.rShZ, .3, g); }
+  if (st.talk > 0) { P.neckX += .035 * Math.sin(T * 3.7) * st.talk; P.neckY += .04 * Math.sin(T * 1.9) * st.talk; }
+  if (st.nod > 0) P.neckX += .26 * Math.sin(T * 9) * st.nod;
+  if (st.shakeH > 0) P.neckY += .38 * Math.sin(T * 10) * st.shakeH;
+  if (st.laugh > 0) { const l = st.laugh; P.neckX -= .16 * l; P.spine += (.03 + .03 * Math.sin(T * 18)) * l; P.lShZ += .08 * Math.sin(T * 18) * l; P.rShZ += .08 * Math.sin(T * 18) * l; }
+  if (st.clap > 0) { const c = st.clap, k = .5 + .5 * Math.sin(T * 14); P.lShX = lerp(P.lShX, 1.05, c); P.rShX = lerp(P.rShX, 1.05, c); P.lEl = lerp(P.lEl, .75, c); P.rEl = lerp(P.rEl, .75, c); P.lShZ = lerp(P.lShZ, -.32 + .34 * k, c); P.rShZ = lerp(P.rShZ, -.32 + .34 * k, c); }
+  if (st.dance > 0) { const d = st.dance, b = .5 + .5 * Math.sin(T * 12); P.spine += .1 * Math.sin(T * 6) * d; P.lShZ = lerp(P.lShZ, 1.5 + .5 * Math.sin(T * 6), d); P.rShZ = lerp(P.rShZ, 1.5 + .5 * Math.sin(T * 6 + Math.PI), d); P.lEl = lerp(P.lEl, 1.1, d); P.rEl = lerp(P.rEl, 1.1, d); P.lKnee += .3 * b * d; P.rKnee += .3 * b * d; P.hipY -= .06 * b * d; P.neckX += .08 * Math.sin(T * 12) * d; }
+  if (!st.moving) P.spine += .012 * Math.sin(t * 1.7 + o.seed);
   if (o.elder) { P.spine += .22 * (1 - P.lie); P.neckX -= .16; P.lKnee += .1; P.rKnee += .1; }
   if (st.gA > 0) {
     const stride = r.P.uLeg * (st.run ? 4.6 : 3.3), ph = st.gait / stride * TAU, A = st.gA * (st.run ? 1.45 : 1), s1 = Math.sin(ph);
@@ -155,18 +193,22 @@ function poseHuman(o, st) {
   if (st.wave > 0) { const w = st.wave; P.rShZ = lerp(P.rShZ, 2.6, w); P.rShX = lerp(P.rShX, .1, w); P.rEl = lerp(P.rEl, .45, w) + Math.sin(st.waveT * 11) * .45 * w; }
   setPose(o, P);
   o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone';
+  const bl = st.hold === 'binoc' ? 0 : blinkAt(t, o.seed), open = Math.max(st.talk * (.5 + .5 * Math.sin(st.fx * 15)) * (.55 + .45 * Math.sin(st.fx * 5.3 + 1)), st.laugh * (.65 + .2 * Math.sin(st.fx * 18)), st.hold === null && P.lShX > 2 ? .5 : 0, st.dance * .35);
+  r.eyes.forEach(e => { e.g.scale.y = 1 - .92 * bl; e.p.position.x = st.gazeX * r.r * .055; e.p.position.y = st.gazeY * r.r * .05; });
+  r.mouth.scale.y = .2 + open * .85; r.mouth.scale.x = 1.25 + st.laugh * .25;
+  const browUp = (P.lShX > 2 ? .07 : 0) + st.laugh * .03; r.brows.forEach(b => { b.position.y = r.r * 1.33 + browUp * r.r; });
 }
 function poseAnimal(o, st, t) {
   const r = o.rig, A = st.gA * (st.run ? 1.4 : 1), ph = st.gait / Math.max(.12, r.A.leg * 2.2) * TAU;
-  r.legs.forEach((l, i) => { const off = (i === 0 || i === 3) ? 0 : Math.PI; l.rotation.x = Math.sin(ph + off) * .55 * A; });
+  r.legs.forEach((l, i) => { const off = (i === 0 || i === 3) ? 0 : Math.PI; l.rotation.x = Math.sin(ph + off) * .55 * A + (st.jumpY > 0 ? (i < 2 ? -.6 : .6) * Math.min(1, st.jumpY * 3) : 0); });
   if (o.type === 'bird') r.body.position.y = .17 + Math.abs(Math.sin(ph)) * .05 * A;
   if (r.tail) r.tail.rotation.z = Math.sin(t * (st.gA > 0 ? 14 : 4)) * (o.type === 'horse' ? .15 : .35);
   r.neck.rotation.y = st.pose.neckY;
 }
 function applyItem(o, s, t) {
   const st = evalItem(s, t);
-  o.root.position.set(st.x, 0, st.z); o.root.rotation.set(0, st.rot, 0);
-  if (o.kind === 'human') poseHuman(o, st);
+  o.root.position.set(st.x, st.jumpY * (o.kind === 'human' ? o.sc * 1.75 / 1.72 : o.kind === 'animal' ? .7 : 1), st.z); o.root.rotation.set(0, st.rot, 0);
+  if (o.kind === 'human') poseHuman(o, st, t);
   else if (o.kind === 'animal') poseAnimal(o, st, t);
   else if (o.wheels) o.wheels.forEach(w => w.rotation.x = st.gait / .34);
   o.st = st; return st;
@@ -373,6 +415,61 @@ function updateMarks() {
   pathL.geometry.attributes.position.needsUpdate = true; pathL.visible = k > 0;
 }
 
+/* ---------- on-screen handles (director view) ---------- */
+const hmat = c => new THREE.MeshBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: .96 });
+function makeRotHandle() {
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(.05, .01, .72), hmat('#f2a23a')); shaft.position.z = .5; g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(.12, .26, 14), hmat('#f2a23a')); head.rotation.x = Math.PI / 2; head.position.z = .95; g.add(head);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(.15, 16, 12), hmat('#ffd28a')); knob.position.set(0, .03, 1.12); g.add(knob);
+  g.traverse(o => { o.layers.set(1); o.renderOrder = 12; o.userData.handle = { type: 'rot' }; }); g.visible = false; return g;
+}
+function makeKnob() {
+  const g = new THREE.Group();
+  const k = new THREE.Mesh(new THREE.SphereGeometry(.15, 16, 12), hmat('#79c4e6')); k.position.y = .05; g.add(k);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(.22, .29, 28), hmat('#79c4e6')); ring.rotation.x = -Math.PI / 2; g.add(ring);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(.12, .28, 14), hmat('#79c4e6')); head.rotation.x = Math.PI / 2; head.position.set(0, .03, -.48); g.add(head);
+  g.traverse(o => { o.layers.set(1); o.renderOrder = 12; }); scene.add(g); return g;
+}
+function updateHandles() {
+  const s = RT.sel && itemById(RT.sel), o = s && OBJ[s.id], show = !!o && !RT.playing && !document.body.classList.contains('cine');
+  HND.rot.visible = show;
+  let kn = 0;
+  if (show) {
+    const sz = s.kind === 'human' ? 1 : clamp((o.lastR || .5) / .55, 1, 3.2), k = clamp(dirCam.position.distanceTo(o.root.position) / 10, .75, 2.6);
+    HND.rot.position.set(o.root.position.x, .05, o.root.position.z); HND.rot.rotation.set(0, o.st.rot, 0); HND.rot.scale.set(k * sz, k, k * sz);
+    let x = s.x, z = s.z;
+    (s.actions || []).map((a, i) => ({ a, i })).sort((p, q) => p.a.t - q.a.t).forEach(({ a, i }) => {
+      if (a.type !== 'walk' && a.type !== 'run') return;
+      const tx = a.tx == null ? x : a.tx, tz = a.tz == null ? z : a.tz, K = HND.knobs[kn] || (HND.knobs[kn] = makeKnob());
+      K.visible = true; K.position.set(tx, .04, tz); K.rotation.set(0, Math.atan2(tx - x, tz - z), 0); K.scale.setScalar(clamp(dirCam.position.distanceTo(K.position) / 10, .75, 2.6));
+      const hd = { type: 'tgt', id: s.id, ai: i }, on = RT.selAct && RT.selAct.id === s.id && RT.selAct.ai === i;
+      K.traverse(c => { c.userData.handle = hd; if (c.material) c.material.color.set(on ? '#f2a23a' : '#79c4e6'); });
+      x = tx; z = tz; kn++;
+    });
+  }
+  for (let j = kn; j < HND.knobs.length; j++) HND.knobs[j].visible = false;
+  const arr = pathAll.geometry.attributes.position.array; let n = 0;
+  ST.items.forEach(it => { if (it.id === RT.sel) return; let x = it.x, z = it.z; (it.actions || []).slice().sort((a, b) => a.t - b.t).forEach(a => { if ((a.type === 'walk' || a.type === 'run') && n < 234) { arr[n++] = x; arr[n++] = .04; arr[n++] = z; arr[n++] = a.tx; arr[n++] = .04; arr[n++] = a.tz; x = a.tx; z = a.tz; } }); });
+  for (let j = n; j < arr.length; j++) arr[j] = 0; pathAll.geometry.attributes.position.needsUpdate = true; pathAll.visible = n > 0;
+}
+
+/* ---------- weather ---------- */
+function ensureRain(on) {
+  if (on && !rainL) {
+    const N = 1700, g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 6), 3));
+    rainL = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#d6dee8', transparent: true, opacity: .5 })); rainL.frustumCulled = false;
+    rainL.userData.seed = Array.from({ length: N }, () => [Math.random(), Math.random(), Math.random()]); scene.add(rainL);
+  }
+  if (rainL) rainL.visible = !!on;
+}
+function weatherTick(t, R) {
+  if (!rainL || !rainL.visible) return;
+  const a = rainL.geometry.attributes.position.array, S = rainL.userData.seed, cx = R ? R.c.x : ORB.tx, cz = R ? R.c.z : ORB.tz, RR = 14, H = 11;
+  for (let i = 0; i < S.length; i++) { const [u, v, w] = S[i], x = cx + (u - .5) * 2 * RR, z = cz + (v - .5) * 2 * RR, y = H - ((w * H + t * 11) % H); a[i * 6] = x; a[i * 6 + 1] = y; a[i * 6 + 2] = z; a[i * 6 + 3] = x + .02; a[i * 6 + 4] = y + .42; a[i * 6 + 5] = z + .015; }
+  rainL.geometry.attributes.position.needsUpdate = true;
+}
+
 /* ---------- backdrop photo ---------- */
 function setBackdrop(img) {
   if (bdMesh) { scene.remove(bdMesh); bdMesh.material.map && bdMesh.material.map.dispose(); bdMesh = null; }
@@ -413,7 +510,7 @@ function programFrame(t) {
 
 /* ---------- drawing ---------- */
 function vp(x, y, w, h, H) { renderer.setViewport(x, H - y - h, w, h); renderer.setScissor(x, H - y - h, w, h); }
-function pipRect(W, H, a) { let w = Math.round(Math.min(W * (W < 600 ? .3 : .26), 300)), h = Math.round(w / a); if (h > H * .42) { h = Math.round(H * .42); w = Math.round(h * a); } return { x: 12, y: H - h - 12, w, h }; }
+function pipRect(W, H, a) { const st = document.body.classList.contains('stage'), nar = innerWidth <= 640, b = st ? (nar ? 122 : 84) + (RT.src !== 'edit' ? 60 : 0) : 12; let w = Math.round(Math.min(W * (W < 600 ? .3 : st ? .22 : .26), 300)), h = Math.round(w / a); if (h > H * .38) { h = Math.round(H * .38); w = Math.round(h * a); } return { x: 12, y: H - h - b, w, h }; }
 function draw() {
   const W = monEl.clientWidth, H = monEl.clientHeight; if (!W || !H || !ST) return;
   const asp = aspV(); let fw = W, fh = W / asp; if (fh > H) { fh = H; fw = H * asp; } fw = Math.floor(fw); fh = Math.floor(fh);
@@ -424,7 +521,7 @@ function draw() {
   updateGizmos(R, pc);
   placeBackdrop(R);
   applyAll(RT.t);
-  updateMarks();
+  updateMarks(); updateHandles(); weatherTick(RT.t, R);
   const cp = Math.cos(ORB.ph); dirCam.position.set(ORB.tx + ORB.r * Math.sin(ORB.th) * cp, ORB.ty + ORB.r * Math.sin(ORB.ph), ORB.tz + ORB.r * Math.cos(ORB.th) * cp); dirCam.lookAt(ORB.tx, ORB.ty, ORB.tz);
   renderer.setScissorTest(false); renderer.setClearColor(0x0b0505, 1); renderer.clear(); renderer.setScissorTest(true);
   const mixEl = document.getElementById('mix');
@@ -455,11 +552,34 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), gPlane = new THREE
 function setRay(x, y) { const W = monEl.clientWidth, H = monEl.clientHeight; ndc.set(x / W * 2 - 1, -(y / H) * 2 + 1); dirCam.aspect = W / H; dirCam.updateProjectionMatrix(); ray.setFromCamera(ndc, dirCam); }
 function pickAt(x, y) {
   setRay(x, y);
-  ray.layers.set(1); const gz = ray.intersectObjects(Object.values(GIZ), true);
+  ray.layers.set(1);
+  const hs = [HND.rot].concat(HND.knobs).filter(h => h && h.visible), hh = hs.length ? ray.intersectObjects(hs, true) : [];
+  if (hh.length) return { handle: hh[0].object.userData.handle };
+  const gz = ray.intersectObjects(Object.values(GIZ), true);
   if (gz.length) { let o = gz[0].object; while (o && !(o.userData && o.userData.camId)) o = o.parent; if (o) return { cam: o.userData.camId }; }
   ray.layers.set(0); const hits = ray.intersectObjects(Object.values(OBJ).map(o => o.root), true);
   if (hits.length) { let o = hits[0].object; while (o && !(o.userData && o.userData.itemId)) o = o.parent; if (o) return { item: o.userData.itemId }; }
-  return null;
+  const near = nearestOnScreen(x, y, dirCam, 0, 0, monEl.clientWidth, monEl.clientHeight, 30);
+  return near ? { item: near } : null;
+}
+function nearestOnScreen(x, y, cam, rx, ry, rw, rh, tol) {
+  let best = null, bd = tol; const a = new THREE.Vector3(), b = new THREE.Vector3();
+  for (const s of ST.items) {
+    const o = OBJ[s.id]; if (!o) continue;
+    a.copy(o.root.position); b.copy(o.root.position); b.y += s.kind === 'human' ? s.h / 100 : Math.max(.3, (o.lastR || .4) * 1.2);
+    a.project(cam); b.project(cam); if (a.z > 1 || b.z > 1) continue;
+    const ax = rx + (a.x + 1) / 2 * rw, ay = ry + (1 - a.y) / 2 * rh, bx2 = rx + (b.x + 1) / 2 * rw, by = ry + (1 - b.y) / 2 * rh;
+    const dx = bx2 - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1, u = clamp(((x - ax) * dx + (y - ay) * dy) / L2, 0, 1), d = Math.hypot(x - (ax + u * dx), y - (ay + u * dy));
+    if (d < bd) { bd = d; best = s.id; }
+  }
+  return best;
+}
+function pickInFrame(x, y) {
+  const fr = RT.frameRect; if (!RT.R || !inRect(x, y, fr)) return null;
+  ndc.set((x - fr.x) / fr.w * 2 - 1, -((y - fr.y) / fr.h) * 2 + 1); ray.setFromCamera(ndc, shotCam); ray.layers.set(0);
+  const hits = ray.intersectObjects(Object.values(OBJ).map(o => o.root), true);
+  if (hits.length) { let o = hits[0].object; while (o && !(o.userData && o.userData.itemId)) o = o.parent; if (o) return o.userData.itemId; }
+  return nearestOnScreen(x, y, shotCam, fr.x, fr.y, fr.w, fr.h, 34);
 }
 function groundAt(x, y) { setRay(x, y); ray.layers.set(0); const p = new THREE.Vector3(); return ray.ray.intersectPlane(gPlane, p) ? p : null; }
 function framingCam() { if (RT.quiz) return null; if (RT.src !== 'edit') return camById(RT.src); const sa = shotAt(RT.t); return sa ? camById(sa.s.cam) : null; }
@@ -471,14 +591,16 @@ function initPointer() {
   monEl.addEventListener('pointerdown', e => {
     if (e.target.closest('.srcbar,.ctx')) return;
     const p = loc(e); ptrs.set(e.pointerId, p); try { monEl.setPointerCapture(e.pointerId); } catch (_) { }
-    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; drag = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), r0: ORB.r, cam: framingCam(), o0: (framingCam() || {}).dOff || 1 }; return; }
+    if (ptrs.size === 2) { if (drag && drag.lp) clearTimeout(drag.lp); const [a, b] = [...ptrs.values()]; drag = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), r0: ORB.r, cam: framingCam(), o0: (framingCam() || {}).dOff || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; return; }
     if (RT.pipR && inRect(p.x, p.y, RT.pipR) && !document.body.classList.contains('cine')) { drag = { type: 'pip', x: p.x, y: p.y, moved: false }; return; }
     if (RT.view === 'dir') {
       if (RT.pick) { const g = groundAt(p.x, p.y); if (g && window.onPickGround) onPickGround(g); drag = null; return; }
       const h = pickAt(p.x, p.y);
+      if (h && h.handle) { const hd = h.handle; if (hd.type === 'rot') drag = { type: 'rotH', id: RT.sel, moved: false }; else { drag = { type: 'tgtH', id: hd.id, ai: hd.ai, moved: false }; RT.selAct = { id: hd.id, ai: hd.ai }; RT.dirty = true; } return; }
       if (h && h.item) { const s = itemById(h.item), g = groundAt(p.x, p.y); if (window.onSelectItem) onSelectItem(h.item); drag = g ? { type: 'item', id: h.item, ox: s.x - g.x, oz: s.z - g.z, moved: false } : null; return; }
       if (h && h.cam) { const c = camById(h.cam); if (window.onSelectCam) onSelectCam(h.cam); const g = groundAt(p.x, p.y); drag = c && c.mode === 'free' && g ? { type: 'camMove', cam: c, ox: (c.px || 0) - g.x, oz: (c.pz || 0) - g.z, moved: false } : null; return; }
       drag = { type: (e.button === 2 || e.shiftKey) ? 'pan' : 'orbit', x: p.x, y: p.y, moved: false };
+      if (RT.sel && drag.type === 'orbit') { const d0 = drag; d0.lp = setTimeout(() => { if (drag === d0 && !d0.moved) { const g = groundAt(d0.x, d0.y); drag = null; if (g && window.onLongPressGround) onLongPressGround(g); } }, 560); }
     } else drag = { type: 'frame', x: p.x, y: p.y, moved: false, cam: framingCam() };
   });
   monEl.addEventListener('pointermove', e => {
@@ -486,16 +608,18 @@ function initPointer() {
     const p = loc(e), prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, p);
     if (!drag) return;
     const dx = p.x - prev.x, dy = p.y - prev.y;
-    if (Math.abs(p.x - (drag.x ?? p.x)) + Math.abs(p.y - (drag.y ?? p.y)) > 4) drag.moved = true;
+    if (Math.abs(p.x - (drag.x ?? p.x)) + Math.abs(p.y - (drag.y ?? p.y)) > 6) { drag.moved = true; if (drag.lp) { clearTimeout(drag.lp); drag.lp = null; } }
     if (drag.type === 'pinch' && ptrs.size >= 2) {
       const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      if (RT.view === 'dir') ORB.r = clamp(drag.r0 * drag.d0 / d, 1.5, 120);
+      if (RT.view === 'dir') { ORB.r = clamp(drag.r0 * drag.d0 / d, 1.5, 120); const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, ddx = mx - drag.mx, ddy = my - drag.my, k = ORB.r * .0016, c = Math.cos(ORB.th), sn = Math.sin(ORB.th); ORB.tx += (-c * ddx - sn * ddy) * k; ORB.tz += (sn * ddx - c * ddy) * k; drag.mx = mx; drag.my = my; }
       else if (drag.cam && drag.cam.mode === 'free') { const c = drag.cam, k = (d - (drag.dl || drag.d0)) * .01, y = (c.yaw || 0) * D2R; c.px = +((c.px || 0) + Math.sin(y) * k).toFixed(3); c.pz = +((c.pz || 0) + Math.cos(y) * k).toFixed(3); drag.dl = d; drag.changed = true; }
       else if (drag.cam) { drag.cam.dOff = clamp(drag.o0 * drag.d0 / d, .3, 3); drag.changed = true; }
       RT.dirty = true; return;
     }
     if (drag.type === 'orbit') { ORB.th -= dx * .008; ORB.ph = clamp(ORB.ph + dy * .006, .04, 1.52); RT.dirty = true; }
-    else if (drag.type === 'pan') { const k = ORB.r * .0016, c = Math.cos(ORB.th), s = Math.sin(ORB.th); ORB.tx -= (dx * c) * k; ORB.tz -= (-dx * s) * k; ORB.tx -= dy * s * k; ORB.tz -= dy * c * k; RT.dirty = true; }
+    else if (drag.type === 'pan') { const k = ORB.r * .0016, c = Math.cos(ORB.th), sn = Math.sin(ORB.th); ORB.tx += (-c * dx - sn * dy) * k; ORB.tz += (sn * dx - c * dy) * k; RT.dirty = true; }
+    else if (drag.type === 'rotH') { const g = groundAt(p.x, p.y), s = itemById(drag.id), o = OBJ[drag.id]; if (g && s && o) { const ang = Math.atan2(g.x - o.root.position.x, g.z - o.root.position.z), d = (ang - o.st.rot) / D2R; s.rot = Math.round(((((s.rot || 0) + d) % 360) + 540) % 360 - 180); drag.moved = true; RT.dirty = true; } }
+    else if (drag.type === 'tgtH') { const g = groundAt(p.x, p.y), s = itemById(drag.id), a = s && s.actions[drag.ai]; if (g && a) { a.tx = +g.x.toFixed(2); a.tz = +g.z.toFixed(2); const s0 = evalItem(s, a.t), dist = Math.hypot(a.tx - s0.x, a.tz - s0.z); a.dur = +Math.max(.4, dist / (a.type === 'run' ? 3.4 : 1.3)).toFixed(2); drag.moved = true; RT.dirty = true; } }
     else if (drag.type === 'camMove') { const g = groundAt(p.x, p.y); if (g) { drag.cam.px = +(g.x + drag.ox).toFixed(2); drag.cam.pz = +(g.z + drag.oz).toFixed(2); drag.moved = true; RT.dirty = true; } }
     else if (drag.type === 'item') { const g = groundAt(p.x, p.y); const s = itemById(drag.id); if (g && s) { s.x = +(g.x + drag.ox).toFixed(2); s.z = +(g.z + drag.oz).toFixed(2); drag.moved = true; RT.dirty = true; } }
     else if (drag.type === 'frame' && drag.cam) {
@@ -511,8 +635,11 @@ function initPointer() {
     if (!drag) return;
     if (drag.type === 'pinch') { if (ptrs.size === 0) { if (drag.changed && window.onCamEdited) onCamEdited(); drag = null; } return; }
     if (drag.type === 'pip' && !drag.moved && window.onSwapView) onSwapView();
-    if ((drag.type === 'item' || drag.type === 'camMove') && drag.moved && window.onItemMoved) onItemMoved();
+    if (drag.lp) clearTimeout(drag.lp);
+    if ((drag.type === 'item' || drag.type === 'camMove' || drag.type === 'rotH' || drag.type === 'tgtH') && drag.moved && window.onItemMoved) onItemMoved();
+    if ((drag.type === 'rotH' || drag.type === 'tgtH') && !drag.moved && window.onHandleTap) onHandleTap(drag);
     if (drag.type === 'frame' && drag.changed && window.onCamEdited) onCamEdited();
+    if (drag.type === 'frame' && !drag.moved && !drag.changed && window.onSelectItem) { const id = pickInFrame(drag.x, drag.y); onSelectItem(id); }
     if (drag.type === 'orbit' && !drag.moved) {
       const now = performance.now();
       if (now - (RT.lastTap || 0) < 330) { const g = groundAt(drag.x, drag.y); if (g) { ORB.tx = g.x; ORB.tz = g.z; RT.dirty = true; } RT.lastTap = 0; }
