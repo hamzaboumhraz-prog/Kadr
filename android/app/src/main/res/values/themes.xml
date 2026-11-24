@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="kadr_bg">#FF1C0E0C</color>
+  <style name="KadrTheme" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">@color/kadr_bg</item>
+    <item name="android:statusBarColor">@color/kadr_bg</item>
+    <item name="android:navigationBarColor">@color/kadr_bg</item>
+  </style>
+</resources>
