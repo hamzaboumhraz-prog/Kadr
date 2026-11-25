@@ -37,7 +37,8 @@ function blankScene(env, cast, aspect) {
   const S = { v: 1, seq: 1, env, light: ENVS[env].light, weather: 'clear', aspect: aspect || '16:9', items: [], cams: [], shots: [], bd: null, ov: { thirds: 1, safe: 0, lbl: 1 }, lesson: null };
   const prev = ST; ST = S;
   const src = cast && cast.length ? cast : [newItemSpec('man', 0, 0, 0)];
-  src.forEach((c, i) => { const it = JSON.parse(JSON.stringify(c)); it.id = nid('i'); it.actions = []; it.pose = 'stand'; it.x = +((i - (src.length - 1) / 2) * 1.2).toFixed(2); it.z = 0; it.rot = 0; S.items.push(it); });
+  const la = isLib(env) && LIB.items[env.slice(4)], o0 = la && Array.isArray(la.start) ? la.start : [0, 0];
+  src.forEach((c, i) => { const it = JSON.parse(JSON.stringify(c)); it.id = nid('i'); it.actions = []; it.pose = 'stand'; it.x = +((i - (src.length - 1) / 2) * 1.2 + (+o0[0] || 0)).toFixed(2); it.z = +o0[1] || 0; it.rot = 0; S.items.push(it); });
   const c = newCam({ target: S.items[0].id, size: 'MS' }, 0); S.cams.push(c); S.shots.push({ id: nid('s'), cam: c.id, dur: 3, trans: 'cut' });
   ST = prev; return S;
 }
@@ -190,17 +191,21 @@ function saveHelp(name, blob, why) {
 function fileSafe(n) { return String(n || 'kadr').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) || 'kadr'; }
 function exportProjectFile(P) {
   if (!P) return; if (P === PRJ) flushSave();
-  const data = Object.assign({ kadr: 'project', v: 2 }, P); delete data.lessons;
+  const data = Object.assign({ kadr: 'project', v: 2 }, P); delete data.lessons; const used = window.libUsed ? libUsed(P) : []; if (used.length) data.assets = used;
   saveBlob(fileSafe(P.name) + '.kadr', new Blob([JSON.stringify(data)], { type: 'application/json' }));
 }
 function pickFile() { const f = $('#fileIn'); f.value = ''; f.click(); }
 function onFilePicked(e) {
   const f = e.target.files && e.target.files[0]; if (!f) return;
-  if (f.size > 8e6) return toast('الملف كبير جدًا');
-  const rd = new FileReader(); rd.onload = () => importText(String(rd.result), f.name); rd.onerror = () => toast('تعذّرت قراءة الملف'); rd.readAsText(f);
+  if (f.size > 60e6) return toast('الملف كبير جدًا');
+  const rd = new FileReader();
+  rd.onload = () => { const buf = rd.result; if (String.fromCharCode(...new Uint8Array(buf, 0, Math.min(4, buf.byteLength))) === 'glTF') { if (PRJ) hideHome(); glbDialog(buf, f.name); } else importText(new TextDecoder().decode(buf), f.name); };
+  rd.onerror = () => toast('تعذّرت قراءة الملف'); rd.readAsArrayBuffer(f);
 }
-function importText(txt, fname) {
-  let J; try { J = JSON.parse(String(txt).replace(/^﻿/, '').trim()); } catch (e) { openModal('الملف غير صالح', `<p>هذا الملف ليس ملف كادر صالحًا (نص <bdi dir="ltr">JSON</bdi>).</p><p class="note">${esc(e.message || '')}</p>`); return; }
+async function importText(txt, fname) {
+  let J; try { J = JSON.parse(String(txt).replace(/^\uFEFF/, '').trim()); } catch (e) { openModal('الملف غير صالح', `<p>هذا الملف ليس ملف كادر صالحًا (نص <bdi dir="ltr">JSON</bdi>).</p><p class="note">${esc(e.message || '')}</p>`); return; }
+  if (J && J.kadr === 'asset') { if (homeOn() && PRJ) hideHome(); await libInstall(J.assets || [J], true); return; }
+  if (J && Array.isArray(J.assets) && J.assets.length) { const n = await libInstall(J.assets, false); if (n) toast(`أُضيف ${n} من الديكورات والعناصر إلى مكتبتك`); }
   let P, rep;
   try {
     if (J && (J.kadr === 'project' || (Array.isArray(J.scenes) && J.scenes[0] && Array.isArray(J.scenes[0].items) && J.scenes[0].cams))) {

@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.speech.tts.TextToSpeech;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -30,6 +31,7 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Locale;
 
 /** كادر — a thin Android shell around the web app, which ships inside the APK (assets/www). */
 public class MainActivity extends Activity {
@@ -41,6 +43,7 @@ public class MainActivity extends Activity {
   @Override
   protected void onCreate(Bundle state) {
     super.onCreate(state);
+    initTts();
     web = new WebView(this);
     web.setBackgroundColor(0xFF1C0E0C);
     setContentView(web);
@@ -150,7 +153,26 @@ public class MainActivity extends Activity {
   }
 
   /** Called from the page. Small files: saveFile(name, base64, mime). Large files in pieces: saveBegin, saveChunk…, saveEnd. */
+  @Override protected void onDestroy() { if (tts != null) { tts.stop(); tts.shutdown(); } super.onDestroy(); }
+  private TextToSpeech tts; private boolean ttsReady = false;
+  private void initTts() { if (tts == null) tts = new TextToSpeech(this, st -> ttsReady = st == TextToSpeech.SUCCESS); }
+
   class Bridge {
+    @JavascriptInterface
+    public void speak(String text, String lang, float rate) {
+      runOnUiThread(() -> {
+        initTts(); if (!ttsReady) { toast("محرّك القراءة الصوتية غير جاهز بعد"); return; }
+        Locale loc = lang != null && lang.startsWith("ar") ? new Locale("ar") : lang != null && lang.startsWith("fr") ? Locale.FRENCH : Locale.ENGLISH;
+        int r = tts.setLanguage(loc);
+        if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) { toast("لا يوجد صوت لهذه اللغة في الهاتف: ثبّت لغة القراءة من إعدادات تحويل النص إلى كلام"); return; }
+        tts.setSpeechRate(Math.max(.6f, Math.min(1.8f, rate)));
+        tts.speak(text, TextToSpeech.QUEUE_ADD, null, "kadr" + System.nanoTime());
+      });
+    }
+
+    @JavascriptInterface
+    public void hush() { runOnUiThread(() -> { if (tts != null) tts.stop(); }); }
+
     private final Map<String, File> parts = new HashMap<>();
     private final Map<String, String[]> meta = new HashMap<>();
 

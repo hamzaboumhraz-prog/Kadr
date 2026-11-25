@@ -8,7 +8,7 @@ const IC = {
   start: sv('<path d="M6 5v14"/><path d="M18 5.5v13L9 12z"/>'), prev: sv('<path d="M15 6l-6 6 6 6"/>'), next: sv('<path d="M9 6l6 6-6 6"/>'),
   loop: sv('<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>'),
   undo: sv('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'), redo: sv('<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'),
-  dir: sv('<path d="M3 8l9-5 9 5-9 5z"/><path d="M3 13l9 5 9-5"/>'), cam: sv('<rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/>'),
+  dir: sv('<path d="M3 8l9-5 9 5-9 5z"/><path d="M3 13l9 5 9-5"/>'), plan: sv('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/><circle cx="15" cy="15" r="2"/>'), target: sv('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'), cam: sv('<rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/>'),
   cine: sv('<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>'),
   board: sv('<rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/>'),
   plus: sv('<path d="M12 5v14M5 12h14"/>'), copy: sv('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
@@ -119,7 +119,7 @@ function commit() {
 function undo() { if (HIST.i > 0) { HIST.i--; ST = JSON.parse(HIST.s[HIST.i]); save(); refreshWorld(); renderAll(); toast('تراجع'); } }
 function redo() { if (HIST.i < HIST.s.length - 1) { HIST.i++; ST = JSON.parse(HIST.s[HIST.i]); save(); refreshWorld(); renderAll(); } }
 function setState(S, msg) { ST = normalize(S); RT.t = 0; RT.src = 'edit'; RT.sel = null; RT.selShot = null; RT.cam = ST.cams[0] ? ST.cams[0].id : null; RT.quiz = null; RT.camPrevOn = false; RT.view = 'cam'; fitOrbit(); commit(); if (msg) toast(msg); }
-function fitOrbit() { const e = ENVS[ST.env] || ENVS.studio; ORB.r = e.r; ORB.tx = 0; ORB.tz = 0; ORB.ty = .9; ORB.th = .75; ORB.ph = e.ph || .55; RT.dirty = true; }
+function fitOrbit() { const e = ENVS[ST.env] || ENVS.studio; ORB.r = e.r; ORB.tx = 0; ORB.tz = 0; ORB.ty = .9; ORB.th = .75; ORB.ph = e.ph || .55; orbSnap(); RT.dirty = true; }
 
 /* ---------- toast, modal, hint ---------- */
 let toastT = null;
@@ -143,14 +143,15 @@ function renderPanel() {
   p.innerHTML = f();
 }
 function pScene() {
-  return `<section><h3>المكان</h3><div class="grid2">${Object.entries(ENVS).map(([k, e]) => `<button class="tile${ST.env === k ? ' on' : ''}" data-act="env" data-v="${k}"><span class="sw" style="background:${ENV_SW[k]}"></span><span>${e.ar}</span></button>`).join('')}</div></section>
+  return `<section><h3>المكان</h3><div class="grid2">${Object.entries(ENVS).map(([k, e]) => `<button class="tile${ST.env === k ? ' on' : ''}" data-act="env" data-v="${k}"><span class="sw" style="background:${ENV_SW[k] || '#555'}"></span><span>${esc(e.ar)}</span></button>`).join('')}</div>
+  <div class="btns" style="margin-top:10px"><button class="btn" data-lib="pick">${IC.file} استيراد ديكور أو عناصر</button></div></section>
   ${lightSection()}
   <h3 style="margin-top:14px">الطقس</h3><div class="chips">${Object.entries(WEATHER).map(([k, v]) => chip(v, (ST.weather || 'clear') === k, `data-act="weather" data-v="${k}"`)).join('')}</div></section>
   <section><h3>نسبة العرض <small>Aspect ratio</small></h3><div class="chips">${ASPECTS.map(a => chip(`<bdi dir="ltr">${a.k}</bdi> <small>${a.ar}</small>`, ST.aspect === a.k, `data-act="aspect" data-v="${a.k}"`)).join('')}</div></section>
   <section><h3>خلفية من صورة</h3><p class="note">صوّر مكانًا حقيقيًا بهاتفك وضعه خلف المشهد كخلفية مسطّحة، مثل الخلفيات المرسومة في الاستوديوهات. المكان لا يتحول إلى مجسّم، لكنك ترى شخصياتك وكادراتك أمامه. تعمل أفضل مع «استوديو فارغ» أو الأماكن المفتوحة.</p>
   <div class="btns"><label class="btn">${IC.img} اختر صورة<input type="file" id="bdFile" accept="image/*" hidden></label>${RT.bdImg ? `<button class="btn danger" data-act="bdDel">إزالة الخلفية</button>` : ''}</div>
   ${RT.bdImg && ST.bd ? `<div class="row"><span>الوضع</span><div class="chips">${chip('خلف الهدف دائمًا', ST.bd.follow, 'data-act="bdMode" data-v="1"')}${chip('ثابتة في المكان', !ST.bd.follow, 'data-act="bdMode" data-v="0"')}</div></div>${rng('المسافة', 'dist', 2, 60, 1, ST.bd.dist, 'bd')}${!ST.bd.follow ? rng('الارتفاع', 'size', 3, 40, 1, ST.bd.size, 'bd') : ''}` : ''}</section>
-  <section><h3>أدوات الكادر</h3><div class="chips">${chip('شبكة الأثلاث', ST.ov.thirds, 'data-act="ov" data-v="thirds"')}${chip('الهامش الآمن', ST.ov.safe, 'data-act="ov" data-v="safe"')}${chip('بطاقة اللقطة', ST.ov.lbl, 'data-act="ov" data-v="lbl"')}</div></section>
+  <section><h3>أدوات الكادر</h3><div class="chips">${chip('شبكة الأثلاث', ST.ov.thirds, 'data-act="ov" data-v="thirds"')}${chip('الهامش الآمن', ST.ov.safe, 'data-act="ov" data-v="safe"')}${chip('بطاقة اللقطة', ST.ov.lbl, 'data-act="ov" data-v="lbl"')}${chip('ترجمة الحوار', ST.ov.subs !== 0, 'data-act="ov" data-v="subs"')}${chip('صوت الحوار', VOICE.on, 'data-act="voice"')}</div></section>
   <section><h3>المشروع</h3><p class="note">${PRJ ? `«${esc(PRJ.name)}»، المشهد ${PRJ.cur + 1} من ${PRJ.scenes.length}. ` : ''}كل مشهد له مكانه وشخصياته ولقطاته، ويُحفظ كل شيء تلقائيًا في هذا الجهاز. احفظه كملف لتنقله إلى جهاز آخر أو ترسله لتلامذتك.</p><div class="btns"><button class="btn" data-act="scenes">${IC.scenes} المشاهد</button><button class="btn" data-act="saveFile">${IC.dl} احفظ المشروع كملف</button><button class="btn" data-act="home">${IC.home} كل المشاريع</button></div></section>${appSection()}`;
 }
 function lightSection() {
@@ -166,11 +167,12 @@ function lightSection() {
 const ICATS = [['people', 'أشخاص'], ['animals', 'حيوانات'], ['things', 'أشياء'], ['lights', 'أضواء']];
 function pItems() {
   const s = itemById(RT.sel); let gal;
-  if (ITEMCAT === 'people') gal = `<div class="grid3">${Object.entries(CAST).map(([k, c]) => `<button class="tile" data-act="add" data-v="${k}">${personIcon(c)}<span>${c.ar}</span></button>`).join('')}</div>`;
-  else if (ITEMCAT === 'animals') gal = `<div class="grid5">${Object.entries(ANIMALS).map(([k, a]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:${a.color};border-radius:50%"></span><span>${a.ar}</span></button>`).join('')}</div>`;
+  const std = ([k]) => !isLib(k);
+  if (ITEMCAT === 'people') gal = `<div class="grid3">${Object.entries(CAST).filter(std).map(([k, c]) => `<button class="tile" data-act="add" data-v="${k}">${personIcon(c)}<span>${c.ar}</span></button>`).join('')}</div>`;
+  else if (ITEMCAT === 'animals') gal = `<div class="grid5">${Object.entries(ANIMALS).filter(std).map(([k, a]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:${a.color};border-radius:50%"></span><span>${a.ar}</span></button>`).join('')}</div>`;
   else if (ITEMCAT === 'lights') gal = `<div class="grid3">${Object.entries(PROPS).filter(([k, p]) => p.light).map(([k, p]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:radial-gradient(#fff3d6,#f2a23a 60%,#3a2a20)"></span><span>${p.ar}</span></button>`).join('')}<button class="tile" data-act="threePt"><span class="sw" style="background:conic-gradient(#ffcf9a 0 33%,#fff1dc 0 66%,#dce9ff 0)"></span><span>إضاءة ثلاثية</span></button></div>`;
   else if (ITEMCAT === 'mine') gal = typeof libGallery === 'function' ? libGallery() : '';
-  else gal = `<div class="grid3">${Object.entries(PROPS).filter(([k, p]) => !p.light).map(([k, p]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:${p.color}"></span><span>${p.ar}</span></button>`).join('')}</div>`;
+  else gal = `<div class="grid3">${Object.entries(PROPS).filter(([k, p]) => !p.light && !isLib(k)).map(([k, p]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:${p.color}"></span><span>${p.ar}</span></button>`).join('')}</div>`;
   const cats = ICATS.concat(typeof libGallery === 'function' ? [['mine', 'مكتبتي']] : []);
   return `<section><h3>أضف إلى المشهد</h3><div class="chips seg1">${cats.map(([k, t]) => chip(t, ITEMCAT === k, `data-act="icat" data-v="${k}"`)).join('')}</div><div style="margin-top:10px">${gal}</div></section>
   <section><h3>في المشهد <small>${ST.items.length}</small></h3>${listChips(ST.items)}</section>
@@ -225,8 +227,9 @@ function edActs(s) {
     if (a.type === 'turn') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[-180, 'استدارة كاملة'], [-90, 'يمينًا 90°'], [-45, 'يمينًا 45°'], [45, 'يسارًا 45°'], [90, 'يسارًا 90°']], a.v == null ? 90 : a.v)}</select>`;
     if (a.type === 'watch') extra = `<select data-ai="${i}" data-af="to" aria-label="يتابع من">${ST.items.filter(x => x.id !== s.id).map(x => `<option value="${x.id}"${x.id === a.to ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
     if (a.type === 'look') extra = `<select data-ai="${i}" data-af="v" aria-label="الاتجاه">${selOpts([[-70, 'إلى اليمين'], [-30, 'قليلًا يمينًا'], [0, 'إلى الأمام'], [30, 'قليلًا يسارًا'], [70, 'إلى اليسار']], a.v == null ? 60 : a.v)}</select>`;
-    return `<div class="actrow"><div class="at">${actLabel(a, s)}</div><button class="mini" data-act="delAct" data-ai="${i}" aria-label="حذف الحركة">${IC.trash}</button>
-    <div class="ap"><label>من <input type="number" step=".1" min="0" value="${fmt(a.t)}" data-ai="${i}" data-af="t"></label><label>المدة <input type="number" step=".1" min=".1" value="${fmt(a.dur)}" data-ai="${i}" data-af="dur"></label>${extra}</div></div>`;
+    const line = a.type === 'talk' ? `<div class="lineed"><textarea rows="2" data-ai="${i}" data-af="line" placeholder="ماذا يقول؟ اكتب الجملة هنا" aria-label="جملة الحوار">${esc(a.line || '')}</textarea>${a.line ? `<button class="mini" data-act="sayAct" data-ai="${i}" aria-label="استمع إلى الجملة" title="استمع">${IC.play}</button>` : ''}</div>` : '';
+    return `<div class="actrow"><div class="at">${actLabel(a, s)}${a.line ? `: <span class="lq">«${esc(a.line.length > 28 ? a.line.slice(0, 28) + '…' : a.line)}»</span>` : ''}</div><button class="mini" data-act="delAct" data-ai="${i}" aria-label="حذف الحركة">${IC.trash}</button>
+    <div class="ap"><label>من <input type="number" step=".1" min="0" value="${fmt(a.t)}" data-ai="${i}" data-af="t"></label><label>المدة <input type="number" step=".1" min=".1" value="${fmt(a.dur)}" data-ai="${i}" data-af="dur"></label>${extra}</div>${line}</div>`;
   }).join('');
   return `<section><h3>الحركة في الزمن</h3><p class="note">كل حركة تبدأ في ثانية محددة وتظهر في التايم لاين باسم الشخصية. للمشي: اضغط مطولًا على الأرض في «عين المخرج»، أو اسحب الدائرة الزرقاء لتغيير الوجهة.</p>${rows}
   <div class="addact"><select id="actType" aria-label="نوع الحركة">${ACT_GROUPS.map(([g, ar]) => { const l = types.filter(([, a]) => a.g === g); return l.length ? `<optgroup label="${ar}">${l.map(([k]) => `<option value="${k}">${actLabel({ type: k }, s)}</option>`).join('')}</optgroup>` : ''; }).join('')}</select><button class="btn pri" data-act="addAct">${IC.plus} عند <bdi dir="ltr">${fmt(RT.t)}s</bdi></button></div></section>`;
@@ -338,10 +341,28 @@ function updTransport() {
   $('#tcTot').textContent = fmt(totalDur()); $('#tcBig').textContent = fmt(RT.t);
   $('#bUndo').disabled = HIST.i <= 0; $('#bRedo').disabled = HIST.i >= HIST.s.length - 1;
 }
-function play(from0) { if (!ST.shots.length) return toast('أضف لقطة أولًا'); closePop(); hideCtx(); RT.src = 'edit'; RT.quiz = null; RT.camPrevOn = false; if (from0 || RT.t >= totalDur() - .02) RT.t = 0; RT.playing = true; RT.view = 'cam'; RT.lastShot = -1; updTransport(); renderSUI(); RT.dirty = true; }
-function pause() { RT.playing = false; RT.film = false; updTransport(); renderSUI(); if (TAB === 'items') renderPanel(); }
+function play(from0) { if (!ST.shots.length) return toast('أضف لقطة أولًا'); VOICE.said.clear(); closePop(); hideCtx(); RT.src = 'edit'; RT.quiz = null; RT.camPrevOn = false; if (from0 || RT.t >= totalDur() - .02) RT.t = 0; RT.playing = true; RT.view = 'cam'; RT.lastShot = -1; updTransport(); renderSUI(); RT.dirty = true; }
+function pause() { RT.playing = false; RT.film = false; hush(); updTransport(); renderSUI(); if (TAB === 'items') renderPanel(); }
 function jumpCut(d) { const st = shotStarts().concat([totalDur()]); RT.src = 'edit'; let t = RT.t; if (d > 0) t = st.find(x => x > RT.t + .01) ?? totalDur(); else t = [...st].reverse().find(x => x < RT.t - .05) ?? 0; RT.t = Math.min(t, Math.max(0, totalDur() - .001)); RT.dirty = true; updPH(true); }
-function setView(v) { RT.view = v; updTransport(); renderSUI(); RT.dirty = true; hint(v === 'dir' ? 'عين المخرج: انقر على عنصر لتحديده، اسحب السهم البرتقالي لتدويره، واضغط مطولًا على الأرض ليمشي إليها.' : 'عين الكاميرا: انقر على عنصر لتحديده، واسحب داخل الكادر لتدوير الكاميرا.', 4200, 'view-' + v); }
+/* keyboard flight in the 3D director view: W/S forward-back, A/D sideways, Q/E down-up */
+const KEYS = new Set();
+function flyStep(dt) {
+  const sp = Math.max(1.5, ORB.r * .9) * dt, f = { x: -Math.sin(ORB.th), z: -Math.cos(ORB.th) }, r = { x: Math.cos(ORB.th), z: -Math.sin(ORB.th) };
+  let mx = 0, mz = 0, my = 0;
+  if (KEYS.has('KeyW')) { mx += f.x; mz += f.z; } if (KEYS.has('KeyS')) { mx -= f.x; mz -= f.z; }
+  if (KEYS.has('KeyD')) { mx += r.x; mz += r.z; } if (KEYS.has('KeyA')) { mx -= r.x; mz -= r.z; }
+  if (KEYS.has('KeyE')) my += 1; if (KEYS.has('KeyQ')) my -= 1;
+  ORB.tx += mx * sp; ORB.tz += mz * sp; ORB.ty = clamp(ORB.ty + my * sp, -5, 60); RT.dirty = true;
+}
+function dmodeBar() {
+  let el = $('#dmode'); if (!el) { el = document.createElement('div'); el.id = 'dmode'; el.className = 'dmode'; $('#mon').appendChild(el); el.addEventListener('click', e => { const b = e.target.closest('[data-dm]'); if (!b) return; const v = b.dataset.dm; if (v === 'fit') { if (RT.dmode === '2d') planFit(true); else fitOrbit(); RT.dirty = true; return; } RT.dmode = v; hint(v === '2d' ? 'المخطط: اسحب العناصر لتحريكها، والدائرة البرتقالية لتدويرها، ونهاية المسار لتغيير الوجهة. اضغط مطولًا على الأرض ليمشي المختار إليها.' : 'حرّك بإصبع للدوران، وبإصبعين للتقريب والتحريك في كل الاتجاهات. اضغط مرتين على نقطة لتقترب منها.', 4500, 'dm' + v); updDmode(); renderSUI(); RT.dirty = true; }); }
+  return el;
+}
+function updDmode() {
+  const el = dmodeBar(), on = RT.view === 'dir' && !stageOn() && !document.body.classList.contains('cine'); el.hidden = !on; if (!on) return;
+  el.innerHTML = `<button data-dm="3d" class="${RT.dmode !== '2d' ? 'on' : ''}" aria-pressed="${RT.dmode !== '2d'}">3D</button><button data-dm="2d" class="${RT.dmode === '2d' ? 'on' : ''}" aria-pressed="${RT.dmode === '2d'}">2D</button><button data-dm="fit" aria-label="توسيط العرض" title="توسيط">${IC.target}</button>`;
+}
+function setView(v) { RT.view = v; updTransport(); renderSUI(); updDmode(); RT.dirty = true; hint(v === 'dir' ? (RT.dmode === '2d' ? 'المخطط: اسحب العناصر، والدائرة البرتقالية للتدوير، ونهاية المسار لتغيير الوجهة. اضغط مطولًا على الأرض ليمشي المختار إليها.' : 'عين المخرج: إصبع للدوران، إصبعان للتقريب والتحريك في كل الاتجاهات، ونقرتان للاقتراب من نقطة. 3D و2D في الأعلى.') : 'عين الكاميرا: انقر على عنصر لتحديده، واسحب داخل الكادر لتدوير الكاميرا.', 4200, 'view-' + v); }
 function cine(on) { document.body.classList.toggle('cine', on); if (on) { RT.prevView = RT.view; RT.view = 'cam'; play(true); hint('اضغط زر الرجوع أو Esc للخروج', 2500, 'cine'); } else { RT.view = RT.prevView || 'cam'; renderSUI(); } updTransport(); setTimeout(onResize, 30); }
 
 /* ---------- monitor overlays (called after each draw) ---------- */
@@ -475,7 +496,9 @@ function onPanelClick(e) {
     case 'env': ST.env = v; ST.light = ENVS[v].light; fitOrbit(); commit(); break;
     case 'light': ST.light = v; ST.lt = {}; commit(); break;
     case 'ltReset': ST.lt = {}; commit(); break;
+    case 'sayAct': { const s2 = itemById(RT.sel), a = s2 && s2.actions[+b.dataset.ai]; if (a && a.line) sayLine(a.line, a.dur, true); break; }
     case 'icat': ITEMCAT = v; renderPanel(); break;
+    case 'voice': VOICE.on = !VOICE.on; try { localStorage.setItem('kadr-voice', VOICE.on ? '1' : '0'); } catch (e) { } if (!VOICE.on) hush(); else if (!voiceOK()) toast('هذا الجهاز لا يوفّر صوتًا لقراءة الحوار'); renderPanel(); break;
     case 'threePt': {
       const cur = itemById(RT.sel), h = cur && cur.kind !== 'prop' ? cur : ST.items.find(x => x.kind === 'human');
       if (!h) { toast('أضف شخصية أولًا'); break; }
@@ -486,7 +509,7 @@ function onPanelClick(e) {
     case 'weather': ST.weather = v; commit(); break;
     case 'showPath': if (sel) showPath(sel.id, +b.dataset.ai); break;
     case 'aspect': ST.aspect = v; commit(); break;
-    case 'ov': ST.ov[v] = ST.ov[v] ? 0 : 1; commit(); break;
+    case 'ov': ST.ov[v] = v === 'subs' ? (ST.ov.subs === 0 ? 1 : 0) : ST.ov[v] ? 0 : 1; commit(); break;
     case 'bdDel': RT.bdImg = null; ST.bd = null; setBackdrop(null); try { localStorage.removeItem(bdKey()); } catch (e) { } commit(); break;
     case 'bdMode': ST.bd.follow = +v; commit(); break;
     case 'scenes': SHEET.add = false; SHEET.del = null; openScenes(); break;
@@ -539,7 +562,7 @@ function onPanelClick(e) {
     case 'quiz': RT.quiz = null; newQuiz(); break;
     case 'qAns': if (RT.quiz && !RT.quiz.picked) { RT.quiz.picked = v; RT.quiz.n++; if (v === RT.quiz.ans) RT.quiz.right++; renderPanel(); } break;
     case 'qNext': newQuiz(); break;
-    case 'expRes': case 'expFps': case 'expOv': case 'expFilm': case 'expGo': case 'expCancel': case 'expSave': case 'expShare': expAct(A, v); break;
+    case 'expRes': case 'expFps': case 'expOv': case 'expFilm': case 'expSubs': case 'expGo': case 'expCancel': case 'expSave': case 'expShare': expAct(A, v); break;
     case 'qEnd': if (RT.quiz) RT.qLast = `${RT.quiz.right} من ${RT.quiz.n}`; RT.quiz = null; RT.dirty = true; renderPanel(); break;
   }
 }
@@ -555,7 +578,7 @@ function onPanelChange(e) {
   const el = e.target;
   if (el.id === 'bdFile') return handleBd(el);
   if (el.dataset.f && el.dataset.s) { const o = scopeObj(el.dataset.s); if (!o) return; let v = el.value; if (el.type === 'range') v = +v; if (el.tagName === 'SELECT' && el.dataset.f === 'other' && !v) v = null; o[el.dataset.f] = v; if (el.dataset.s === 'cam') RT.src = o.id; commit(); return; }
-  if (el.dataset.ai != null && el.dataset.af) { const s = itemById(RT.sel), a = s && s.actions[+el.dataset.ai]; if (!a) return; if (el.dataset.af === 'to') { a.to = el.value; commit(); return; } let v = +el.value; if (el.dataset.af === 'dur') v = Math.max(.1, v); if (el.dataset.af === 't') v = Math.max(0, v); a[el.dataset.af] = v; commit(); return; }
+  if (el.dataset.ai != null && el.dataset.af) { const s = itemById(RT.sel), a = s && s.actions[+el.dataset.ai]; if (!a) return; if (el.dataset.af === 'to') { a.to = el.value; commit(); return; } if (el.dataset.af === 'line') { a.line = el.value.trim(); if (a.line) a.dur = lineDur(a.line); else delete a.line; commit(); return; } let v = +el.value; if (el.dataset.af === 'dur') v = Math.max(.1, v); if (el.dataset.af === 't') v = Math.max(0, v); a[el.dataset.af] = v; commit(); return; }
   if (el.dataset.shot != null) { const sh = ST.shots[+el.dataset.shot]; if (sh) { sh[el.dataset.sf] = el.value; commit(); } }
 }
 function bindAll() {
@@ -575,8 +598,11 @@ function bindAll() {
   $('#srcBack').onclick = () => { RT.src = 'edit'; RT.camPrevOn = false; RT.dirty = true; if (TAB === 'cams') renderPanel(); };
   bindTL(); if (window.bindCtx) bindCtx();
   window.kadrBack = () => { if (!$('#modal').hidden) { closeModal(); return true; } if (window.closePop && closePop()) return true; if (document.body.classList.contains('cine')) { cine(false); return true; } if (stageOn()) { exitStage(); return true; } if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); return true; } if (homeOn()) { if (HOME.step || HOME.menu) { HOME.step = null; HOME.menu = null; renderHome(); return true; } return false; } showHome(); return true; };
+  document.addEventListener('keyup', e => KEYS.delete(e.code));
+  addEventListener('blur', () => KEYS.clear());
   document.addEventListener('keydown', e => {
     if (e.target.closest('input,select,textarea')) return;
+    if (RT.view === 'dir' && RT.dmode !== '2d' && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'].includes(e.code) && !e.ctrlKey && !e.metaKey) { KEYS.add(e.code); return; }
     if (e.key === 'Escape') { if (window.closePop && closePop()) return; if (!$('#modal').hidden) closeModal(); else if (document.body.classList.contains('cine')) cine(false); else if (stageOn()) exitStage(); else if (RT.pick) { RT.pick = null; hideHint(); renderPanel(); } }
     else if (e.key === ' ') { e.preventDefault(); RT.playing ? pause() : play(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
@@ -589,11 +615,29 @@ function bindAll() {
 
 /* ---------- loop & boot ---------- */
 let lastNow = performance.now();
+/* dialogue voice: the device reads each line when it starts during playback */
+const VOICE = { on: (() => { try { return localStorage.getItem('kadr-voice') === '1'; } catch (e) { return false; } })(), said: new Set() };
+function lineDur(line) { return +clamp([...line].length / 11 + .5, .8, 25).toFixed(1); }
+function voiceOK() { return !!((window.AndroidBridge && AndroidBridge.speak) || window.speechSynthesis); }
+function langOf(t) { return /[\u0600-\u06FF]/.test(t) ? 'ar' : /[éèàçùâêîôû]/i.test(t) ? 'fr-FR' : 'en-US'; }
+function sayLine(text, dur, now) {
+  const lang = langOf(text), rate = clamp(([...text].length / 11 + .4) / Math.max(.6, dur || 2), .75, 1.6);
+  if (window.AndroidBridge && AndroidBridge.speak) { try { AndroidBridge.speak(text, lang, rate); } catch (e) { } return; }
+  const S = window.speechSynthesis; if (!S) { if (now) toast('هذا الجهاز لا يوفّر صوتًا لقراءة الحوار'); return; }
+  const u = new SpeechSynthesisUtterance(text); u.lang = lang === 'ar' ? 'ar-SA' : lang; u.rate = rate;
+  const v = S.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(lang.slice(0, 2))); if (v) u.voice = v;
+  if (now) S.cancel(); S.speak(u);
+}
+function hush() { VOICE.said.clear(); if (window.AndroidBridge && AndroidBridge.hush) { try { AndroidBridge.hush(); } catch (e) { } } else if (window.speechSynthesis) speechSynthesis.cancel(); }
+function voiceTick(t0, t1) {
+  if (!VOICE.on || t1 < t0) return;
+  ST.items.forEach(s => (s.actions || []).forEach(a => { if (a.type === 'talk' && a.line && a.t >= t0 && a.t < t1) { const k = s.id + '|' + a.t; if (!VOICE.said.has(k)) { VOICE.said.add(k); sayLine(a.line, a.dur); } } }));
+}
 function loop(now) {
-  const dt = Math.min(.1, (now - lastNow) / 1000); lastNow = now;
+  const dt = Math.min(.1, (now - lastNow) / 1000); lastNow = now; orbStep(dt); if (RT.view === 'dir' && RT.dmode !== '2d' && KEYS.size) flyStep(dt);
   if (RT.playing) {
-    RT.t += dt; const end = totalDur();
-    if (RT.t >= end) { const film = RT.film; if (film && filmNext()) { } else if (RT.loop && !film) { RT.t = 0; RT.lastShot = -1; } else { RT.t = Math.max(0, end - .001); RT.playing = false; updTransport(); if (document.body.classList.contains('cine')) setTimeout(() => cine(false), 600); } }
+    const t0 = RT.t; RT.t += dt; const end = totalDur(); voiceTick(t0 === 0 ? -1e-3 : t0, Math.min(RT.t, end));
+    if (RT.t >= end) { const film = RT.film; if (film && filmNext()) { } else if (RT.loop && !film) { RT.t = 0; RT.lastShot = -1; VOICE.said.clear(); } else { RT.t = Math.max(0, end - .001); RT.playing = false; updTransport(); if (document.body.classList.contains('cine')) setTimeout(() => cine(false), 600); } }
     RT.dirty = true;
   }
   if (RT.camPrevOn) { RT.camPrev += dt / 3; if (RT.camPrev > 1.25) RT.camPrev = 0; RT.dirty = true; }
@@ -607,7 +651,7 @@ function boot() {
   ST = normalize(blankScene('studio')); RT.cam = ST.cams[0] ? ST.cams[0].id : null;
   init3D(); fitOrbit(); refreshWorld();
   HIST.s = [JSON.stringify(ST)]; HIST.i = 0;
-  renderTabs(); renderAll(); registerSW(); bindProject();
+  renderTabs(); renderAll(); registerSW(); bindProject(); bindLib();
   requestAnimationFrame(loop);
   showHome();
 }

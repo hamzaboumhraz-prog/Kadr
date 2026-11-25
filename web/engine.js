@@ -4,7 +4,16 @@ const RT = { t: 0, playing: false, loop: true, view: 'cam', src: 'edit', sel: nu
 let renderer, scene, shotCam, dirCam, tmpCam, envG = null, envKey = null, envInfo = null, hemi, sun, LAMPS = [], ringM, axisL, pathL, frus, mixCtx, monEl, bdMesh = null;
 const OBJ = {}, GIZ = {}, HND = { rot: null, knobs: [] };
 let pathAll = null, rainL = null;
-const ORB = { tx: 0, ty: .9, tz: 0, r: 11, th: .75, ph: .5 };
+const ORB = { tx: 0, ty: .9, tz: 0, r: 11, th: .75, ph: .5 }, ORS = Object.assign({}, ORB);
+/* smooth director camera: ORB is where it is going, ORS is where it is drawn */
+function orbStep(dt) {
+  const k = 1 - Math.exp(-dt * 13); let moving = false;
+  for (const key in ORB) { const d = ORB[key] - ORS[key]; if (Math.abs(d) > (key === 'r' ? ORS.r * 1e-4 : 1e-4)) { ORS[key] += d * k; moving = true; } else ORS[key] = ORB[key]; }
+  if (moving && RT.view === 'dir') RT.dirty = true;
+}
+function orbSnap() { Object.assign(ORS, ORB); }
+const _cr = new THREE.Vector3(), _cu = new THREE.Vector3();
+function orbPan(dx, dy) { dirCam.updateMatrixWorld(); _cr.setFromMatrixColumn(dirCam.matrixWorld, 0); _cu.setFromMatrixColumn(dirCam.matrixWorld, 1); const k = ORB.r * .0017; ORB.tx -= (_cr.x * dx - _cu.x * dy) * k; ORB.ty = clamp(ORB.ty - (_cr.y * dx - _cu.y * dy) * k, -5, 60); ORB.tz -= (_cr.z * dx - _cu.z * dy) * k; RT.dirty = true; }
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t, smooth = t => t * t * (3 - 2 * t);
 function lerpAng(a, b, t) { const d = ((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI; return a + d * t; }
@@ -31,7 +40,7 @@ function init3D() {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.autoClear = false;
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
   scene = new THREE.Scene();
-  SKY = makeSky(); scene.add(SKY.mesh); pmrem = new THREE.PMREMGenerator(renderer); envScene = new THREE.Scene(); ENVSKY = makeSky(true); envScene.add(ENVSKY.mesh);
+  SKY = makeSky(); scene.add(SKY.mesh); scene.onBeforeRender = (r, sc, cam) => cutWalls(cam); pmrem = new THREE.PMREMGenerator(renderer); envScene = new THREE.Scene(); ENVSKY = makeSky(true); envScene.add(ENVSKY.mesh);
   hemi = new THREE.HemisphereLight(0xffffff, 0x444444, .6); scene.add(hemi);
   sun = new THREE.DirectionalLight(0xffffff, .9); sun.castShadow = true;
   const ms = innerWidth < 700 ? 1024 : 2048; sun.shadow.mapSize.set(ms, ms);
@@ -54,7 +63,7 @@ function init3D() {
   mixCtx = document.getElementById('mix').getContext('2d');
   new ResizeObserver(onResize).observe(monEl);
   onResize();
-  initPointer();
+  initPointer(); if (window.initPlan) initPlan();
 }
 /* ---------- sky dome and image-based light ---------- */
 let SKY = null, ENVSKY = null, pmrem = null, envScene = null, envRT = null, iblKey = '', envT = 0;
@@ -109,6 +118,7 @@ function onResize() {
 function disposeObj(r) {
   const keep = new Set(MC.values());
   r.traverse(m => {
+    if (m.userData && m.userData.shared) return;
     if (m.geometry) m.geometry.dispose(); if (m.userData && m.userData.rt) m.userData.rt.dispose();
     (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => { if (!x) return; if (x.map) x.map.dispose(); if (!keep.has(x)) x.dispose(); });
   });
@@ -158,12 +168,20 @@ function actionCenter() {
 
 /* ---------- items ---------- */
 function itemHash(s) { const o = Object.assign({}, s); ['x', 'z', 'rot', 'actions', 'name', 'pose', 'id', 'power', 'lc', 'angle', 'tilt', 'aim'].forEach(k => delete o[k]); return JSON.stringify(o); }
+/* fades to and from black are painted only over the shot, never over the director's view */
+let FADE = null;
+function fadeQuad(a) {
+  if (!(a > .002)) return;
+  if (!FADE) { const m = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }); FADE = { cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), sc: new THREE.Scene(), m }; FADE.sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m)); }
+  FADE.m.opacity = Math.min(1, a); const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(FADE.sc, FADE.cam); renderer.autoClear = ac;
+}
 function buildItem(s) {
   let o;
   if (s.kind === 'human') o = makeHuman(s);
-  else if (s.kind === 'animal') { o = makeAnimal(s.type, s.color); }
+  else if (isLib(s.type) && LIB.items[s.type.slice(4)] && LIB.items[s.type.slice(4)].fmt === 'glb') o = buildModel(s);
+  else if (s.kind === 'animal') { const la = isLib(s.type) && LIB.items[s.type.slice(4)]; o = la ? makeAnimal(s.type, s.color, Object.assign({ base: 'dog' }, la.animal || {})) : makeAnimal(s.type, s.color); }
   else { const lamps = []; const inner = makeProp(s.type, s.color, lamps); const root = G(); root.add(inner); o = { root, kind: 'prop', lamps, wheels: inner.userData.wheels || null, film: inner.userData.film || null }; }
-  if (s.kind !== 'human') { const sc = s.scale || 1; o.root.scale.setScalar(sc); o.sc = sc; _box.setFromObject(o.root); o.lastR = Math.max(_box.max.x - _box.min.x, _box.max.z - _box.min.z) / 2; }
+  if (s.kind !== 'human') { const sc = s.scale || 1; o.root.scale.setScalar(sc); o.sc = sc; _box.setFromObject(o.root); o.lastR = Math.max(_box.max.x - _box.min.x, _box.max.z - _box.min.z) / 2; o.fp = { w: _box.max.x - _box.min.x, d: _box.max.z - _box.min.z }; }
   return o;
 }
 function syncItems() {
@@ -215,7 +233,7 @@ function evalItem(s, t, shallow) {
       case 'dress': if (p < 1) { st.dress = env(p); st.dressP = p; st.fx = el; } break;
       case 'wave': if (p < 1) { st.wave = Math.pow(Math.sin(Math.PI * p), .3); st.waveT = el; } break;
       case 'jump': if (p < 1) { const q = clamp((p - .15) / .7, 0, 1); st.jumpY = Math.sin(Math.PI * q) * .45; st.crouch = Math.max(0, 1 - p / .15) * (p < .15 ? Math.sin(Math.PI * p / .15) : 0) + (p > .85 ? Math.sin(Math.PI * (p - .85) / .15) : 0); } break;
-      case 'talk': if (p < 1) { st.talk = Math.max(st.talk, env(p)); st.fx = el; } break;
+      case 'talk': if (p < 1) { st.talk = Math.max(st.talk, env(p)); st.fx = el; if (a.line) { st.line = a.line; st.lineP = el / Math.max(.1, dur - .15); } } break;
       case 'laugh': if (p < 1) { st.laugh = env(p); st.fx = el; } break;
       case 'nod': if (p < 1) { st.nod = env(p); st.fx = el; } break;
       case 'shake': if (p < 1) { st.shakeH = env(p); st.fx = el; } break;
@@ -242,6 +260,25 @@ function setPose(o, P) {
   r.lHip.rotation.set(-P.lHipX, 0, 0); r.rHip.rotation.set(-P.rHipX, 0, 0);
   r.lKnee.rotation.set(P.lKnee, 0, 0); r.rKnee.rotation.set(P.rKnee, 0, 0);
   r.body.rotation.x = -Math.PI / 2 * P.lie; r.body.position.y = P.lie * (.5 / o.sc + .14);
+}
+/* lip sync from the written line: open on vowels, closed on m/b/f, small on other consonants */
+const VOW = new Set('اأإآوىيةaeiouyéèàâêôûو'.split('')), CLOSED = new Set('مبفپmbpfvw'.split(''));
+function visemeOf(ch) { if (!ch || /[\s.,،؛;:!?؟…\-–—"«»()]/.test(ch)) return .05; if (CLOSED.has(ch.toLowerCase())) return 0; if (VOW.has(ch.toLowerCase())) return 1; if (/[\u064B-\u0652]/.test(ch)) return .7; return .42; }
+function visemeOpen(line, p) {
+  const c = [...line]; if (!c.length || p >= 1 || p < 0) return 0;
+  const x = p * c.length, i = Math.floor(x), f = x - i, a = visemeOf(c[i]), b = visemeOf(c[i + 1]);
+  return lerp(a, b, f * f * (3 - 2 * f)) * (.85 + .15 * Math.sin(x * 2.3));
+}
+function updSubs() {
+  const el = document.getElementById('subs'); if (!el) return;
+  const L = ST.ov.subs === 0 || RT.view === 'dir' && !RT.pipR ? [] : activeLines(RT.t), key = L.map(x => x.a.line).join('|');
+  if (el.dataset.k !== key) { el.dataset.k = key; el.innerHTML = L.map(x => `<span dir="auto">${esc(x.a.line)}</span>`).join(''); }
+  const f = RT.frameRect; el.style.left = (f.x + f.w * .07) + 'px'; el.style.width = (f.w * .86) + 'px'; el.style.bottom = (monEl.clientHeight - f.y - f.h + Math.max(f.h * .07, 50)) + 'px';
+}
+function activeLines(t) {
+  const out = [];
+  ST.items.forEach(s => (s.actions || []).forEach(a => { if (a.type === 'talk' && a.line && t >= a.t && t < a.t + a.dur + .25) out.push({ s, a }); }));
+  return out;
 }
 function blinkAt(t, seed) { const per = 3.1 + (seed % 7) * .27, ph = ((t + seed * .37) % per + per) % per; return ph < .14 ? Math.sin(ph / .14 * Math.PI) : 0; }
 function poseHuman(o, st, t) {
@@ -273,7 +310,8 @@ function poseHuman(o, st, t) {
     P.spine += .08 * Math.sin(st.fx * 5) * d; P.neckX += .12 * d; }
   setPose(o, P);
   o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone'; if (o.hold.tphone) o.hold.tphone.visible = st.hold === 'tphone';
-  const bl = st.hold === 'binoc' ? 0 : blinkAt(t, o.seed), open = Math.max(st.talk * (.5 + .5 * Math.sin(st.fx * 15)) * (.55 + .45 * Math.sin(st.fx * 5.3 + 1)), st.laugh * (.65 + .2 * Math.sin(st.fx * 18)), st.hold === null && P.lShX > 2 ? .5 : 0, st.dance * .35);
+  const lip = st.line ? visemeOpen(st.line, st.lineP) : st.talk * (.5 + .5 * Math.sin(st.fx * 15)) * (.55 + .45 * Math.sin(st.fx * 5.3 + 1));
+  const bl = st.hold === 'binoc' ? 0 : blinkAt(t, o.seed), open = Math.max(st.line ? lip * st.talk : lip, st.laugh * (.65 + .2 * Math.sin(st.fx * 18)), st.hold === null && P.lShX > 2 ? .5 : 0, st.dance * .35);
   r.eyes.forEach(e => { e.g.scale.y = 1 - .92 * bl; e.p.position.x = st.gazeX * r.r * .055; e.p.position.y = st.gazeY * r.r * .05; });
   r.mouth.scale.y = .2 + open * .85; r.mouth.scale.x = 1.25 + st.laugh * .25; if (r.lipLo) r.lipLo.position.y = r.r * (.55 - open * .1);
   const browUp = (P.lShX > 2 ? .07 : 0) + st.laugh * .03; r.brows.forEach(b => { b.position.y = r.r * 1.33 + browUp * r.r; });
@@ -290,7 +328,8 @@ function poseAnimal(o, st, t) {
 function applyItem(o, s, t) {
   const st = evalItem(s, t);
   o.root.position.set(st.x, st.jumpY * (o.kind === 'human' ? o.sc * 1.75 / 1.72 : o.kind === 'animal' ? .7 : 1), st.z); o.root.rotation.set(0, st.rot, 0);
-  if (o.kind === 'human') poseHuman(o, st, t);
+  if (o.model) poseModel(o, st, t);
+  else if (o.kind === 'human') poseHuman(o, st, t);
   else if (o.kind === 'animal') poseAnimal(o, st, t);
   else if (o.wheels) o.wheels.forEach(w => w.rotation.x = st.gait / .34);
   if (o.film) poseFilm(o, s, t);
@@ -631,6 +670,7 @@ function gizmoTM() { RT.gizmoTM = false; scene.traverse(o => { if (o.layers.mask
 function draw() {
   const W = monEl.clientWidth, H = monEl.clientHeight; if (!W || !H || !ST) return;
   if (RT.gizmoTM !== false) gizmoTM();
+  updSubs();
   const asp = aspV(); let fw = W, fh = W / asp; if (fh > H) { fh = H; fw = H * asp; } fw = Math.floor(fw); fh = Math.floor(fh);
   const fx = Math.floor((W - fw) / 2), fy = Math.floor((H - fh) / 2); RT.frameRect = { x: fx, y: fy, w: fw, h: fh };
   const pc = progCam(); let R = pc ? computeCam(pc.cfg, pc.p, pc.tb, pc.tn) : null, R2 = null, mixA = 0, fadeA = 0;
@@ -640,7 +680,8 @@ function draw() {
   placeBackdrop(R);
   applyAll(RT.t);
   updateMarks(); updateHandles(); weatherTick(RT.t, R);
-  const cp = Math.cos(ORB.ph); dirCam.position.set(ORB.tx + ORB.r * Math.sin(ORB.th) * cp, ORB.ty + ORB.r * Math.sin(ORB.ph), ORB.tz + ORB.r * Math.cos(ORB.th) * cp); dirCam.lookAt(ORB.tx, ORB.ty, ORB.tz);
+  const cp = Math.cos(ORS.ph); dirCam.position.set(ORS.tx + ORS.r * Math.sin(ORS.th) * cp, ORS.ty + ORS.r * Math.sin(ORS.ph), ORS.tz + ORS.r * Math.cos(ORS.th) * cp); dirCam.lookAt(ORS.tx, ORS.ty, ORS.tz);
+  dirCam.near = clamp(ORS.r * .01, .02, .5); dirCam.updateProjectionMatrix();
   renderer.setScissorTest(false); renderer.setClearColor(0x0b0505, 1); renderer.clear(); renderer.setScissorTest(true);
   const mixEl = document.getElementById('mix');
   if (RT.view === 'cam') {
@@ -649,18 +690,20 @@ function draw() {
       const pr = renderer.getPixelRatio(), X = Math.round(fx * pr), Y = Math.round(fy * pr), FW = Math.round(fw * pr), FH = Math.round(fh * pr); mixCtx.clearRect(0, 0, mixEl.width, mixEl.height); mixCtx.drawImage(renderer.domElement, X, Y, FW, FH, X, Y, FW, FH);
       mixEl.style.opacity = mixA; vp(0, 0, W, H, H); renderer.clear();
     } else mixEl.style.opacity = 0;
-    if (R) { composeCam(shotCam, R); vp(fx, fy, fw, fh, H); renderer.render(scene, shotCam); }
+    if (R) { composeCam(shotCam, R); vp(fx, fy, fw, fh, H); renderer.render(scene, shotCam); fadeQuad(fadeA); }
     if (!document.body.classList.contains('cine')) {
       const pr = pipRect(W, H, 1.6); RT.pipR = pr; dirCam.aspect = pr.w / pr.h; dirCam.updateProjectionMatrix();
       vp(pr.x, pr.y, pr.w, pr.h, H); renderer.setClearColor(0x140908, 1); renderer.clear(); renderer.render(scene, dirCam);
     } else RT.pipR = null;
   } else {
     mixEl.style.opacity = 0;
-    dirCam.aspect = W / H; dirCam.updateProjectionMatrix(); vp(0, 0, W, H, H); renderer.render(scene, dirCam);
-    if (R) { const pr = pipRect(W, H, asp); RT.pipR = pr; composeCam(shotCam, R); vp(pr.x, pr.y, pr.w, pr.h, H); renderer.clear(); renderer.render(scene, shotCam); } else RT.pipR = null;
+    if (RT.dmode === '2d' && planCam) { planFit(); vp(0, 0, W, H, H); renderPlan3D(W, H); }
+    else { dirCam.aspect = W / H; dirCam.updateProjectionMatrix(); vp(0, 0, W, H, H); renderer.render(scene, dirCam); }
+    if (R) { const pr = pipRect(W, H, asp); RT.pipR = pr; composeCam(shotCam, R); vp(pr.x, pr.y, pr.w, pr.h, H); renderer.clear(); renderer.render(scene, shotCam); fadeQuad(fadeA); } else RT.pipR = null;
   }
   renderer.setScissorTest(false);
-  document.getElementById('fade').style.opacity = fadeA;
+  if (PLAN.cv) { const on = planOn(); PLAN.cv.style.display = on ? 'block' : 'none'; if (on) { drawPlan(W, H); if (RT.pipR) { const r = RT.pipR; PLAN.g.clearRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4); } } }
+
   monEl.style.filter = R && R.whip > .05 && RT.view === 'cam' ? `blur(${(R.whip * 3).toFixed(1)}px)` : '';
   if (window.onDrawn) onDrawn(R, pc);
 }
@@ -707,7 +750,7 @@ function initPointer() {
   const loc = e => { const r = monEl.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   monEl.addEventListener('contextmenu', e => e.preventDefault());
   monEl.addEventListener('pointerdown', e => {
-    if (e.target.closest('.srcbar,.ctx')) return;
+    if (e.target.closest('.srcbar,.ctx,.dmode')) return; if (planOn() && e.target === PLAN.cv) return;
     const p = loc(e); ptrs.set(e.pointerId, p); try { monEl.setPointerCapture(e.pointerId); } catch (_) { }
     if (ptrs.size === 2) { if (drag && drag.lp) clearTimeout(drag.lp); const [a, b] = [...ptrs.values()]; drag = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), r0: ORB.r, cam: framingCam(), o0: (framingCam() || {}).dOff || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; return; }
     if (RT.pipR && inRect(p.x, p.y, RT.pipR) && !document.body.classList.contains('cine')) { drag = { type: 'pip', x: p.x, y: p.y, moved: false }; return; }
@@ -729,13 +772,13 @@ function initPointer() {
     if (Math.abs(p.x - (drag.x ?? p.x)) + Math.abs(p.y - (drag.y ?? p.y)) > 6) { drag.moved = true; if (drag.lp) { clearTimeout(drag.lp); drag.lp = null; } }
     if (drag.type === 'pinch' && ptrs.size >= 2) {
       const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      if (RT.view === 'dir') { ORB.r = clamp(drag.r0 * drag.d0 / d, 1.5, 120); const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, ddx = mx - drag.mx, ddy = my - drag.my, k = ORB.r * .0016, c = Math.cos(ORB.th), sn = Math.sin(ORB.th); ORB.tx += (-c * ddx - sn * ddy) * k; ORB.tz += (sn * ddx - c * ddy) * k; drag.mx = mx; drag.my = my; }
+      if (RT.view === 'dir') { ORB.r = clamp(drag.r0 * drag.d0 / d, .3, 500); const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; orbPan(mx - drag.mx, my - drag.my); drag.mx = mx; drag.my = my; }
       else if (drag.cam && drag.cam.mode === 'free') { const c = drag.cam, k = (d - (drag.dl || drag.d0)) * .01, y = (c.yaw || 0) * D2R; c.px = +((c.px || 0) + Math.sin(y) * k).toFixed(3); c.pz = +((c.pz || 0) + Math.cos(y) * k).toFixed(3); drag.dl = d; drag.changed = true; }
       else if (drag.cam) { drag.cam.dOff = clamp(drag.o0 * drag.d0 / d, .3, 3); drag.changed = true; }
       RT.dirty = true; return;
     }
-    if (drag.type === 'orbit') { ORB.th -= dx * .008; ORB.ph = clamp(ORB.ph + dy * .006, .04, 1.52); RT.dirty = true; }
-    else if (drag.type === 'pan') { const k = ORB.r * .0016, c = Math.cos(ORB.th), sn = Math.sin(ORB.th); ORB.tx += (-c * dx - sn * dy) * k; ORB.tz += (sn * dx - c * dy) * k; RT.dirty = true; }
+    if (drag.type === 'orbit') { ORB.th -= dx * .008; ORB.ph = clamp(ORB.ph + dy * .006, -1.35, 1.56); RT.dirty = true; }
+    else if (drag.type === 'pan') orbPan(dx, dy);
     else if (drag.type === 'rotH') { const g = groundAt(p.x, p.y), s = itemById(drag.id), o = OBJ[drag.id]; if (g && s && o) { const ang = Math.atan2(g.x - o.root.position.x, g.z - o.root.position.z), d = (ang - o.st.rot) / D2R; s.rot = Math.round(((((s.rot || 0) + d) % 360) + 540) % 360 - 180); drag.moved = true; RT.dirty = true; } }
     else if (drag.type === 'tgtH') { const g = groundAt(p.x, p.y), s = itemById(drag.id), a = s && s.actions[drag.ai]; if (g && a) { a.tx = +g.x.toFixed(2); a.tz = +g.z.toFixed(2); const s0 = evalItem(s, a.t), dist = Math.hypot(a.tx - s0.x, a.tz - s0.z); a.dur = +Math.max(.4, dist / (a.type === 'run' ? 3.4 : 1.3)).toFixed(2); drag.moved = true; RT.dirty = true; } }
     else if (drag.type === 'camMove') { const g = groundAt(p.x, p.y); if (g) { drag.cam.px = +(g.x + drag.ox).toFixed(2); drag.cam.pz = +(g.z + drag.oz).toFixed(2); drag.moved = true; RT.dirty = true; } }
@@ -760,7 +803,7 @@ function initPointer() {
     if (drag.type === 'frame' && !drag.moved && !drag.changed && window.onSelectItem) { const id = pickInFrame(drag.x, drag.y); onSelectItem(id); }
     if (drag.type === 'orbit' && !drag.moved) {
       const now = performance.now();
-      if (now - (RT.lastTap || 0) < 330) { const g = groundAt(drag.x, drag.y); if (g) { ORB.tx = g.x; ORB.tz = g.z; RT.dirty = true; } RT.lastTap = 0; }
+      if (now - (RT.lastTap || 0) < 330) { const g = groundAt(drag.x, drag.y); if (g) { ORB.tx = g.x; ORB.tz = g.z; ORB.ty = .9; ORB.r = Math.max(2.5, ORB.r * .6); RT.dirty = true; } RT.lastTap = 0; }
       else { RT.lastTap = now; if (window.onSelectItem) onSelectItem(null); }
     }
     drag = null;
@@ -769,7 +812,7 @@ function initPointer() {
   let wt = null;
   monEl.addEventListener('wheel', e => {
     e.preventDefault();
-    if (RT.view === 'dir') ORB.r = clamp(ORB.r * (1 + e.deltaY * .001), 1.5, 120);
+    if (RT.view === 'dir') { const r0 = ORB.r; ORB.r = clamp(ORB.r * (1 + e.deltaY * .0012), .3, 500); if (e.deltaY < 0) { const r = monEl.getBoundingClientRect(), g = groundAt(e.clientX - r.left, e.clientY - r.top); if (g) { const f = 1 - ORB.r / r0; ORB.tx += (g.x - ORB.tx) * f; ORB.tz += (g.z - ORB.tz) * f; } } }
     else { const c = framingCam(); if (c && c.mode === 'free') { const y = (c.yaw || 0) * D2R, k = -e.deltaY * .004; c.px = +((c.px || 0) + Math.sin(y) * k).toFixed(3); c.pz = +((c.pz || 0) + Math.cos(y) * k).toFixed(3); clearTimeout(wt); wt = setTimeout(() => window.onCamEdited && onCamEdited(), 350); }
       else if (c) { c.dOff = clamp((c.dOff || 1) * (1 + e.deltaY * .001), .3, 3); clearTimeout(wt); wt = setTimeout(() => window.onCamEdited && onCamEdited(), 350); } }
     RT.dirty = true;

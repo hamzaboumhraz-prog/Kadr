@@ -13,7 +13,7 @@ function openExport() {
   <p class="note">يُرسم المونتاج صورةً صورة ثم يُحفظ فيديو. ${EXP.film ? `المدة <bdi dir="ltr">${fmt(fd)}s</bdi> · ${prjStats(PRJ).shots} لقطة` : `المدة <bdi dir="ltr">${fmt(totalDur())}s</bdi> · ${ST.shots.length} لقطات`} · النسبة <bdi dir="ltr">${ST.aspect}</bdi></p>
   <div class="row"><span>الدقة</span><div class="chips">${chip('<bdi dir="ltr">720p</bdi>', EXP.res !== 1080, 'data-act="expRes" data-v="720"')}${chip('<bdi dir="ltr">1080p</bdi>', EXP.res === 1080, 'data-act="expRes" data-v="1080"')}</div></div>
   <div class="row"><span>الإيقاع</span><div class="chips">${chip('<bdi dir="ltr">24 fps</bdi> سينمائي', EXP.fps !== 30, 'data-act="expFps" data-v="24"')}${chip('<bdi dir="ltr">30 fps</bdi>', EXP.fps === 30, 'data-act="expFps" data-v="30"')}</div></div>
-  <div class="row"><span>على الصورة</span><div class="chips">${chip('بطاقة اللقطة والزمن', EXP.ov, 'data-act="expOv"')}</div></div>
+  <div class="row"><span>على الصورة</span><div class="chips">${chip('بطاقة اللقطة والزمن', EXP.ov, 'data-act="expOv"')}${chip('ترجمة الحوار', EXP.subs !== false, 'data-act="expSubs"')}</div></div>
   <p class="note">${expSupportFast() ? 'الصيغة: <bdi dir="ltr">MP4 (H.264)</bdi>. يعمل التصدير بسرعة جهازك ولا تسقط أي صورة.' : 'هذا المتصفح لا يدعم الترميز السريع: سيُسجَّل الفيديو في الوقت الحقيقي، وقد تكون الصيغة <bdi dir="ltr">WebM</bdi>.'}</p>
   <div class="btns"><button class="btn pri" data-act="expGo">${IC.film} ابدأ التصدير</button></div></div>`);
 }
@@ -23,6 +23,7 @@ function expAct(A, v) {
     case 'expFps': EXP.fps = +v; openExport(); break;
     case 'expOv': EXP.ov = !EXP.ov; openExport(); break;
     case 'expFilm': EXP.film = v === '1'; openExport(); break;
+    case 'expSubs': EXP.subs = EXP.subs === false; openExport(); break;
     case 'expGo': runExport(); break;
     case 'expCancel': EXP.cancel = true; break;
     case 'expSave': expSave(); break;
@@ -77,6 +78,15 @@ function drawExportFrame(r2, cam, cx, t, W, H) {
   if (pf.R2 && pf.mixA > .002) { shoot(pf.R2); cx.globalAlpha = pf.mixA; cx.drawImage(r2.domElement, 0, 0, W, H); cx.globalAlpha = 1; }
   if (pf.fadeA > 0) { cx.globalAlpha = pf.fadeA; cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H); cx.globalAlpha = 1; }
   if (EXP.ov && pf.pc) drawOverlay(cx, pf, t, W, H);
+  if (EXP.subs !== false && ST.ov.subs !== 0) drawSubs(cx, t, W, H);
+}
+function drawSubs(cx, t, W, H) {
+  const L = activeLines(t); if (!L.length) return;
+  const fs = Math.round(H * .046), lh = fs * 1.35, maxW = W * .84; cx.save(); cx.font = `600 ${fs}px "IBM Plex Sans Arabic", sans-serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  const rows = []; L.forEach(x => { let cur = ''; x.a.line.split(/\s+/).forEach(w => { const nx = cur ? cur + ' ' + w : w; if (cx.measureText(nx).width > maxW && cur) { rows.push(cur); cur = w; } else cur = nx; }); if (cur) rows.push(cur); });
+  let y = H - H * .07 - (rows.length - 1) * lh;
+  rows.forEach(r => { cx.direction = /[\u0600-\u06FF]/.test(r) ? 'rtl' : 'ltr'; const w = cx.measureText(r).width + fs * .8; cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillRect(W / 2 - w / 2, y - lh / 2, w, lh); cx.fillStyle = '#fff'; cx.fillText(r, W / 2, y + fs * .04); y += lh; });
+  cx.restore();
 }
 async function renderVideo(onP) {
   const asp = aspV(), base = EXP.res === 1080 ? 1080 : 720; let W, H;

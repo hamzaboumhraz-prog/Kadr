@@ -296,7 +296,7 @@ function makeProp(type, c, lamps) {
       lampLight(g, 0xffb15c, 6, 0, .35, 0, [lm], lamps); break;
     }
     case 'parasol': { g.add(cy(.03, .03, 2.3, '#e8e2d6', 0, 1.15, 0, 8)); const c = msh(new THREE.ConeGeometry(1.3, .45, 12), mat(C, { side: THREE.DoubleSide })); c.position.y = 2.28; g.add(c); g.add(sp(.06, '#e8e2d6', 0, 2.52, 0)); break; }
-    default: g.add(bx(.5, .5, .5, C, 0, .25, 0));
+    default: if (isLib(type)) g.add(libPropGroup(type, lamps)); else g.add(bx(.5, .5, .5, C, 0, .25, 0));
   }
   return g;
 }
@@ -367,8 +367,8 @@ function makeHuman(s) {
   });
   const nose = G(); head.add(nose);
   const bridge = capM(r * .055, r * .1, r * .34, sk, MSKIN, 10); bridge.position.set(0, r * 1.08, r * .95); bridge.rotation.x = .42; nose.add(bridge);
-  const tip = sp(r * .1, sk, 0, r * .8, r * 1.06, MSKIN); tip.scale.set(1.15, .85, .9); nose.add(tip);
-  [-1, 1].forEach(k => { const w = sp(r * .07, sk, k * r * .1, r * .79, r * 1.0, MSKIN); nose.add(w); });
+  const tip = sp(r * .088, sk, 0, r * .81, r * 1.06, MSKIN); tip.scale.set(1.1, .85, .9); nose.add(tip);
+  [-1, 1].forEach(k => { const w = sp(r * .052, sk, k * r * .085, r * .79, r * 1.0, MSKIN); nose.add(w); });
   const mouth = sp(r * .12, '#2e1412', 0, r * .6, r * .9); mouth.scale.set(1.2, .18, .45); mouth.castShadow = false; head.add(mouth);
   const lipUp = sp(r * .12, lipC, 0, r * .655, r * .935, { roughness: .4 }); lipUp.scale.set(1.3, .24, .42); lipUp.castShadow = false; head.add(lipUp);
   const lipLo = sp(r * .12, lipC, 0, r * .555, r * .92, { roughness: .4 }); lipLo.scale.set(1.15, .28, .45); lipLo.castShadow = false; head.add(lipLo);
@@ -410,7 +410,7 @@ function makeHuman(s) {
   // arms: rounded capsules from shoulder to hand
   const arm = k => {
     const shg = at(G(), k * sh * .86 * bw, tl * .79, 0); spine.add(shg);
-    shg.add(sp(P.lr * 1.22 * bw, upC, 0, 0, 0, MCLOTH));
+    shg.add(sp(P.lr * 1.08 * bw, upC, 0, 0, 0, MCLOTH));
     shg.add(capM(P.lr * 1.02 * bw, P.lr * .9 * bw, P.uArm, upC, MCLOTH));
     const el = at(G(), 0, -P.uArm, 0); shg.add(el);
     el.add(capM(P.lr * .9 * bw, P.lr * .72 * bw, P.fArm, foreC, foreC === sk ? MSKIN : MCLOTH));
@@ -451,8 +451,9 @@ function makeHuman(s) {
 }
 
 /* ---------- animals ---------- */
-function makeAnimal(type, c) {
-  const col = c || ANIMALS[type].color, mk = {}, root = G();
+function makeAnimal(type, c, PA) {
+  if (PA) type = PA.base || 'dog';
+  const col = c || (ANIMALS[type] || ANIMALS.dog).color, mk = {}, root = G();
   const mark = (par, n, x, y, z) => { const o = at(new THREE.Object3D(), x, y, z); par.add(o); mk[n] = o; };
   if (type === 'chicken') {
     const b = sp(.15, col, 0, .27, 0); b.scale.set(.95, .9, 1.25); root.add(b);
@@ -476,7 +477,7 @@ function makeAnimal(type, c) {
     mark(head, 'top', 0, .055, 0); mark(head, 'eye', 0, .012, .04); mark(head, 'chin', 0, -.04, .02); mark(root, 'chest', 0, .17, .04); mark(root, 'hip', 0, .1, 0); mark(root, 'knee', 0, .05, 0); mark(head, 'hand', 0, 0, .09);
     return { root, kind: 'animal', type, rig: { legs, neck: head, head, tail: null, body: b, A: { leg: .1 } }, mk };
   }
-  const A = {
+  let A = {
     cat: { L: .42, R: .1, leg: .19, hr: .085, neck: .07, nx: -.5, tail: .34, tx: -2.5 },
     dog: { L: .64, R: .15, leg: .32, hr: .115, neck: .12, nx: -.55, tail: .28, tx: -2.1, snout: .1 },
     shaggy: { L: .66, R: .17, leg: .3, hr: .125, neck: .12, nx: -.55, tail: .3, tx: -2.1, snout: .08, shag: 1 },
@@ -484,7 +485,8 @@ function makeAnimal(type, c) {
     sheep: { L: .78, R: .26, leg: .3, hr: .11, neck: .08, nx: -.5, tail: .12, tx: -.6, wool: 1 },
     camel: { L: 1.65, R: .34, leg: 1.15, hr: .13, neck: .95, nx: -.95, tail: .45, tx: -.3, snout: .26, hump: 1 },
     donkey: { L: 1.05, R: .25, leg: .62, hr: .13, neck: .45, nx: -.7, tail: .45, tx: -.35, snout: .22, longEars: 1 }
-  }[type];
+  };
+  A = Object.assign({}, A[type] || A.dog, PA || {});
   const bodyY = A.leg + A.R * .8;
   let body;
   if (A.wool) { body = msh(new THREE.IcosahedronGeometry(A.R * 1.15, 1), mat(col, { flatShading: true })); body.scale.set(1, 1, A.L / (2.3 * A.R)); body.position.y = bodyY; }
@@ -516,6 +518,8 @@ function makeAnimal(type, c) {
     else if (type === 'dog' || type === 'shaggy') { const e = bx(A.hr * .3, A.hr * .8, A.hr * .5, shade(col, .7), k * A.hr * .85, A.hr * .1, -A.hr * .1); e.rotation.z = k * .25; head.add(e); }
     else { const e = bx(A.hr * .8, A.hr * .18, A.hr * .35, '#3a3430', k * A.hr * 1.0, A.hr * .2, 0); head.add(e); }
   });
+  if (A.horns) [-1, 1].forEach(k => { const hc = A.hornC || '#6b5a44', hl = A.hr * (A.horns > 1 ? A.horns : 1.3), e = msh(new THREE.ConeGeometry(A.hr * .14, hl, 7), mat(hc, { roughness: .6 })); e.position.set(k * A.hr * .32, A.hr * .85 + hl * .35, -A.hr * .25); e.rotation.set(-.7, 0, -k * .25); head.add(e); });
+  if (A.beard) { const e = msh(new THREE.ConeGeometry(A.hr * .18, A.hr * .7, 6), mat(shade(col, .8))); e.rotation.x = Math.PI; e.position.set(0, -A.hr * .75, A.hr * .55 + (A.snout || 0) * .6); head.add(e); }
   if (A.shag) { const fm = mat(shade(col, 1.15), { flatShading: true }); [[0, .7, .55, .55], [-.45, .45, .6, .4], [.45, .45, .6, .4], [0, .2, .95, .35]].forEach(([x, y, z, r]) => { const t = msh(new THREE.IcosahedronGeometry(A.hr * r, 0), fm); t.position.set(x * A.hr, y * A.hr, z * A.hr); head.add(t); }); }
   if (type === 'horse' || type === 'donkey') for (let i = 0; i < 6; i++) neck.add(bx(.05, .12, .1, '#2b1a10', 0, .06 + i * A.neck * .16, -A.R * .4));
   const tail = at(G(), 0, bodyY + A.R * .3, -A.L * .48); tail.rotation.x = A.tx; root.add(tail);
@@ -544,6 +548,7 @@ function windowOn(g, w, h, x, y, z, ry, arch) {
   return fr;
 }
 function buildEnv(key, lamps) {
+  CUTS = []; if (isLib(key)) return libSet(key, lamps);
   const g = G(); SEED = 11;
   const add = (o, x, z, ry) => { o.position.x += x; o.position.z += z; o.rotation.y = (ry || 0) * D2R; g.add(o); return o; };
   const P = (t, x, z, ry, c) => add(makeProp(t, c, lamps), x, z, ry);

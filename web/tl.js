@@ -258,7 +258,8 @@ function posCtx() {
   else if (RT.ctxCam && GIZ[RT.ctxCam] && GIZ[RT.ctxCam].visible) { _pv.copy(GIZ[RT.ctxCam].position); _pv.y += .45; }
   else _pv.set(NaN, 0, 0);
   if (!isNaN(_pv.x)) {
-    if (RT.view === 'dir') { _pv.project(dirCam); if (_pv.z < 1) { sx = (_pv.x + 1) / 2 * W; sy = (1 - _pv.y) / 2 * H; } }
+    if (planOn()) { const s2 = s || null; if (s2) { const p = posOf(s2), q = w2s(p.x, p.z); sx = q[0]; sy = q[1] - Math.max(itemR(s2) * PLAN.k, 15) - 8; } else if (RT.ctxCam && camById(RT.ctxCam)) { const P = camPose(camById(RT.ctxCam)); if (P) { const q = w2s(P.x, P.z); sx = q[0]; sy = q[1] - 34; } } }
+    else if (RT.view === 'dir') { _pv.project(dirCam); if (_pv.z < 1) { sx = (_pv.x + 1) / 2 * W; sy = (1 - _pv.y) / 2 * H; } }
     else if (RT.R) { _pv.project(shotCam); const fr = RT.frameRect; if (_pv.z < 1) { sx = fr.x + (_pv.x + 1) / 2 * fr.w; sy = fr.y + (1 - _pv.y) / 2 * fr.h; } }
   }
   let x, y;
@@ -301,9 +302,10 @@ function enterStage() {
 }
 function exitStage() { document.body.classList.remove('stage'); closePop(); try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { } setTimeout(onResize, 40); renderAll(); }
 function renderSUI() {
+  if (window.updDmode) updDmode();
   const el = $('#sui'); if (!el) return; if (!stageOn()) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="st-top"><button class="sbtn" data-sui="exit" aria-label="خروج من الشاشة الكاملة">${IC.x}</button>
-  <div class="seg"><button data-sui="cam" class="${RT.view === 'cam' ? 'on' : ''}">${IC.cam}<span>الكاميرا</span></button><button data-sui="dir" class="${RT.view === 'dir' ? 'on' : ''}">${IC.dir}<span>المخرج</span></button></div>
+  <div class="seg"><button data-sui="cam" class="${RT.view === 'cam' ? 'on' : ''}">${IC.cam}<span>الكاميرا</span></button><button data-sui="dir" class="${RT.view === 'dir' && RT.dmode !== '2d' ? 'on' : ''}">${IC.dir}<span>المخرج</span></button><button data-sui="plan" class="${RT.view === 'dir' && RT.dmode === '2d' ? 'on' : ''}">${IC.plan}<span>المخطط</span></button></div>
   <div class="st-r"><button class="sbtn" data-sui="undo" aria-label="تراجع">${IC.undo}</button><button class="sbtn" data-sui="cine" aria-label="عرض سينمائي">${IC.film}</button></div></div>
   <div class="st-bot"><button class="sbtn pl" data-sui="play" aria-label="${RT.playing ? 'إيقاف' : 'تشغيل'}">${RT.playing ? IC.pause : IC.play}</button>
   <input type="range" id="suiT" min="0" max="${tlLen().toFixed(2)}" step="0.01" value="${RT.t}" aria-label="الزمن"><span class="stc" dir="ltr" id="suiTc">${fmt(RT.t)}s</span>
@@ -324,7 +326,8 @@ function bindSUI() {
     switch (b.dataset.sui) {
       case 'exit': exitStage(); break;
       case 'cam': setView('cam'); renderSUI(); break;
-      case 'dir': setView('dir'); renderSUI(); break;
+      case 'dir': RT.dmode = '3d'; setView('dir'); renderSUI(); break;
+      case 'plan': RT.dmode = '2d'; setView('dir'); renderSUI(); break;
       case 'undo': undo(); break;
       case 'cine': cine(true); break;
       case 'play': RT.playing ? pause() : play(); renderSUI(); break;

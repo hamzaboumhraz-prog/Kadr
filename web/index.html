@@ -61,7 +61,7 @@ h1,h2,h3{font-family:"Noto Kufi Arabic","IBM Plex Sans Arabic",sans-serif;margin
 .shotlbl span{background:rgba(15,7,6,.78);border-radius:7px;padding:2px 8px;font-size:13px;white-space:nowrap}
 .shotlbl .k{background:var(--amb);color:#1c0e0c;font-weight:700}
 .shotno{position:absolute;top:10px;right:10px;font-size:13px;background:rgba(15,7,6,.72);padding:3px 9px;border-radius:7px}
-.fade{position:absolute;inset:0;background:#000;opacity:0}
+.fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
 .pip{position:absolute;z-index:3;padding:0;border:2px solid var(--amb);border-radius:8px;background:transparent;box-shadow:0 6px 18px rgba(0,0,0,.5)}
 .pip span{position:absolute;top:-1px;right:-1px;background:var(--amb);color:#1c0e0c;font-size:12px;font-weight:700;padding:1px 7px;border-radius:0 6px 0 6px;white-space:nowrap}
 .hint{position:absolute;z-index:3;top:44px;left:50%;transform:translateX(-50%);background:rgba(15,7,6,.85);border:1px solid var(--line);padding:6px 12px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90%;text-align:center}
@@ -277,6 +277,16 @@ body.stage .toast{bottom:150px}
 body.stage .srcbar{display:none!important}
 @media (max-width:640px){.sui .stc,.sui .seg span,.sui .add span,.sui .st-cam b{display:none}.sui .st-bot{gap:5px;padding:5px;flex-wrap:wrap}.sui .scams{order:-1;flex-basis:100%;max-width:none}.sui .st-cam{bottom:122px}body.stage .shotlbl,body.stage.camstrip .shotlbl{bottom:10px}body.stage .toast{bottom:200px}}
 
+#mon .subs{position:absolute;z-index:4;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+#mon .subs span{display:inline-block;background:rgba(0,0,0,.55);color:#fff;font:600 clamp(13px,2.1vw,19px)/1.35 "IBM Plex Sans Arabic",sans-serif;padding:2px 10px;border-radius:6px;text-shadow:0 1px 2px #000;max-width:100%}
+.lineed{display:flex;gap:6px;align-items:flex-start;margin-top:6px}.lineed textarea{flex:1;min-height:52px;border-radius:10px;border:1px solid var(--line);background:#1a0c0a;color:var(--ink);padding:6px 10px;font:inherit;resize:vertical}
+.lq{color:var(--amb);font-weight:500}
+canvas.plan{position:absolute;inset:0;width:100%;height:100%;z-index:1;touch-action:none;display:none;cursor:grab}
+.dmode{position:absolute;z-index:5;top:10px;left:10px;display:flex;gap:2px;padding:3px;background:rgba(20,10,8,.85);border:1px solid #5a3229;border-radius:12px;direction:ltr}
+.dmode button{min-width:44px;min-height:38px;border:0;border-radius:9px;background:transparent;color:var(--mut);font:700 14px "IBM Plex Sans Arabic",sans-serif;display:grid;place-items:center}
+.dmode button.on{background:var(--amb);color:#1c0e0c}.dmode button svg{width:20px;height:20px}
+body.cine .dmode,body.stage .dmode,.dmode[hidden]{display:none}
+.libtile{position:relative}.libtile .tile{width:100%}.libtile .tile small{color:var(--mut);font-size:11px}.libtile .tile{padding-top:14px}.libtile .mini{position:absolute;top:3px;left:3px;right:auto;min-width:28px;min-height:28px;padding:2px;opacity:.7}
 details.more{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:4px 10px 10px;background:#1a0c0a}
 details.more summary{cursor:pointer;min-height:40px;display:flex;align-items:center;font-weight:600;color:var(--mut)}
 details.more[open] summary{color:var(--ink)}
@@ -359,7 +369,7 @@ body.homeon #app{visibility:hidden}
     </div>
   </header>
   <section class="stage">
-    <div class="mon" id="mon">
+    <div class="mon" id="mon"><div class="subs" id="subs" aria-live="polite"></div>
       <canvas id="cv"></canvas><canvas id="mix"></canvas>
       <div class="frame" id="frame">
         <div class="thirds" id="thirds"></div><div class="safe" id="safe" hidden></div>
@@ -396,7 +406,7 @@ body.homeon #app{visibility:hidden}
 <div class="modal" id="modal" hidden><div class="mbox" role="dialog" aria-modal="true"><div class="mhead"><h2 id="mt"></h2><button class="btn" id="mx">إغلاق</button></div><div class="mbody" id="mb"></div></div></div>
 <div class="pop" id="pop" hidden></div>
 <div class="home" id="home" hidden></div>
-<input type="file" id="fileIn" hidden>
+<input type="file" id="fileIn" hidden><input type="file" id="libIn" hidden>
 <div class="toast" id="toast" role="status"></div>
 <script src="lib/three.min.js"></script>
 <script src="lib/mp4-muxer.js"></script>
@@ -406,6 +416,10 @@ body.homeon #app{visibility:hidden}
 <script src="ui.js"></script>
 <script src="tl.js"></script>
 <script src="export.js"></script>
+<script src="lib/GLTFLoader.js"></script>
+<script src="lib/SkeletonUtils.js"></script>
+<script src="lib.js"></script>
+<script src="plan.js"></script>
 <script src="project.js"></script>
 <script src="script.js"></script>
 <script>boot();</script>

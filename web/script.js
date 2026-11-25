@@ -91,7 +91,8 @@ function buildFromScript(J) {
 
   function buildScene(SC, si) {
     const tag = `المشهد ${si + 1}`;
-    let env = AL.env[nk(SC.place || SC.env || SC.location)] || (ENVS[SC.place] ? SC.place : null);
+    const pl = SC.place || SC.env || SC.location;
+    let env = ENVS[pl] ? pl : (window.LIB && pl && LIB.items[libId(pl)] && LIB.items[libId(pl)].kind === 'set') ? 'lib:' + libId(pl) : AL.env[nk(pl)] || null;
     if (!env) { if (SC.place) W(`${tag}: مكان غير معروف «${SC.place}» فاستُعمل الاستوديو`); env = 'studio'; }
     const light = AL.light[nk(SC.light)] || (LIGHTS[SC.light] ? SC.light : ENVS[env].light);
     const S = { v: 1, seq: 1, env, light, weather: WEATHER[SC.weather] ? SC.weather : 'clear', aspect: String(SC.aspect || aspect), items: [], cams: [], shots: [], bd: null, ov: { thirds: 1, safe: 0, lbl: 1 }, lesson: null, goal: SC.goal || '' };
@@ -102,7 +103,7 @@ function buildFromScript(J) {
     itemsIn.forEach((d, k) => {
       if (!d) return;
       const key = String(d.id || d.ref || d.type || 'item' + k), base = castDefs[d.ref || d.id] || {}, spec = Object.assign({}, base, d);
-      let type = spec.type || spec.kind; type = (CAST[type] || ANIMALS[type] || PROPS[type]) ? type : AL.type[nk(type)];
+      let type = spec.type || spec.kind; type = (CAST[type] || ANIMALS[type] || PROPS[type]) ? type : (window.LIB && type && LIB.items[libId(type)]) ? 'lib:' + libId(type) : AL.type[nk(type)];
       if (!type) { W(`${tag}: نوع غير معروف «${spec.type || key}» فوُضع صندوق مكانه`); type = 'box'; }
       const at = Array.isArray(spec.at) ? spec.at : [0, 0];
       const it = newItemSpec(type, +at[0] || 0, +at[1] || 0, 0);
@@ -208,7 +209,7 @@ function buildFromScript(J) {
         case 'eyes': { const m = { left: 1, right: -1, up: 2, down: -2, center: 0 }; A.v = typeof a.v === 'number' ? a.v : m[nk(a.v || a.to)] != null ? m[nk(a.v || a.to)] : 1; break; }
         default: if (a.v != null) A.v = +a.v;
       }
-      if (a.line) A.line = String(a.line);
+      if (a.line) { A.line = String(a.line); if (type === 'talk' && !a.dur) A.dur = lineDur(A.line); }
       s.actions.push(A);
     }
   }
