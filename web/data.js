@@ -151,6 +151,7 @@ const PROPS = {
   car: { ar: 'سيارة', color: '#c23b2e' }, streetlight: { ar: 'عمود إنارة', color: '#3a3d42' }, bench: { ar: 'كرسي حديقة', color: '#7a5434' },
   wall: { ar: 'جدار', color: '#e7dcc8' }, ctable: { ar: 'طاولة مقهى', color: '#d8d0c0' }, counter: { ar: 'كونتوار', color: '#6e4a31' },
   lantern: { ar: 'فانوس', color: '#c9a24a' }, parasol: { ar: 'مظلة شاطئ', color: '#e7a83a' },
+  spot: { ar: 'كشاف تصوير', color: '#2a2a2a', light: 1 }, softbox: { ar: 'ضوء ناعم', color: '#2a2a2a', light: 1 }, bulb: { ar: 'لمبة', color: '#f2efe8', light: 1 },
   suv: { ar: 'سيارة رباعية الدفع', color: '#e8e4dc' }, stall: { ar: 'خيمة سوق', color: '#b5523b' },
   fence: { ar: 'سياج', color: '#8a6a48' }, hay: { ar: 'كومة تبن', color: '#d9b76a' }
 };
@@ -174,11 +175,24 @@ const ENVS = {
 };
 const WEATHER = { clear: 'صافٍ', fog: 'ضباب', rain: 'مطر' };
 const LIGHTS = {
-  day: { ar: 'نهار', sky: '#c9dced', hs: '#eef4ff', hg: '#9a8a74', hi: .74, sc: '#fff4e2', si: .95, sp: [8, 14, 6], lamp: 0 },
-  sunset: { ar: 'غروب', sky: '#e8a578', hs: '#ffd8b0', hg: '#5a3d33', hi: .6, sc: '#ff9c58', si: 1.1, sp: [-14, 5, 7], lamp: .5 },
-  night: { ar: 'ليل', sky: '#0e1426', hs: '#40507e', hg: '#0c0c14', hi: .42, sc: '#a8b8ff', si: .3, sp: [-6, 12, -8], lamp: 1.6 },
-  warm: { ar: 'داخلي دافئ', sky: '#2a1a14', hs: '#ffe4c4', hg: '#4a3428', hi: .6, sc: '#ffd8a6', si: .72, sp: [5, 9, 7], lamp: 1.1 }
+  day: { ar: 'نهار', tod: 13, sky: '#9cc2e6', hz: '#e2ecf2', hs: '#eef4ff', hg: '#9a8a74', hi: .74, sc: '#fff4e2', si: .95, sp: [8, 14, 6], lamp: 0 },
+  sunset: { ar: 'غروب', tod: 19, sky: '#d98a63', hz: '#ffb680', hs: '#ffd8b0', hg: '#5a3d33', hi: .6, sc: '#ff9c58', si: 1.1, sp: [-14, 5, 7], lamp: .5 },
+  night: { ar: 'ليل', tod: 22, sky: '#0b1020', hz: '#1d2440', hs: '#40507e', hg: '#0c0c14', hi: .42, sc: '#a8b8ff', si: .3, sp: [-6, 12, -8], lamp: 1.6 },
+  warm: { ar: 'داخلي دافئ', tod: 20.5, sky: '#2a1a14', hz: '#3a2a20', hs: '#ffe4c4', hg: '#4a3428', hi: .6, sc: '#ffd8a6', si: .72, sp: [5, 9, 7], lamp: 1.1 }
 };
+/* time of day: hour -> sky, sun and lamps (interpolated) */
+const TOD = [
+  { h: 5, sky: '#1a2140', hz: '#c9837a', hs: '#5a5a8a', hg: '#1a1418', hi: .36, sc: '#ff9a6a', si: .22, el: -2, lamp: 1.2 },
+  { h: 6.5, sky: '#7f9cc4', hz: '#f2b48a', hs: '#ffd8c0', hg: '#5a4a40', hi: .55, sc: '#ffb27a', si: .8, el: 8, lamp: .3 },
+  { h: 9, sky: '#a2c4e6', hz: '#e6eef2', hs: '#eef4ff', hg: '#9a8a74', hi: .7, sc: '#ffeedd', si: .95, el: 35, lamp: 0 },
+  { h: 13, sky: '#9cc2e6', hz: '#e2ecf2', hs: '#f2f6ff', hg: '#9a8a74', hi: .75, sc: '#fff6ea', si: 1, el: 65, lamp: 0 },
+  { h: 17, sky: '#adc6de', hz: '#f0dcc0', hs: '#fff0dc', hg: '#8a7464', hi: .68, sc: '#ffd9a8', si: 1, el: 25, lamp: 0 },
+  { h: 19, sky: '#d98a63', hz: '#ffb680', hs: '#ffd8b0', hg: '#5a3d33', hi: .58, sc: '#ff9050', si: 1.05, el: 5, lamp: .5 },
+  { h: 20.3, sky: '#3b3b5e', hz: '#a86a5a', hs: '#7a7aa8', hg: '#1e1a22', hi: .45, sc: '#ff8a60', si: .35, el: -3, lamp: 1.2 },
+  { h: 22, sky: '#0b1020', hz: '#1d2440', hs: '#40507e', hg: '#0c0c14', hi: .42, sc: '#a8b8ff', si: .3, el: 45, lamp: 1.6 },
+  { h: 23.5, sky: '#0a0e1c', hz: '#161c34', hs: '#3a4874', hg: '#0a0a12', hi: .4, sc: '#a8b8ff', si: .28, el: 50, lamp: 1.6 }
+];
+const LIGHT_COLORS = [['#ffcf9a', 'دافئ'], ['#fff1dc', 'محايد'], ['#dce9ff', 'نهاري بارد'], ['#ff8a5c', 'برتقالي'], ['#6a8cff', 'أزرق'], ['#ff5a6e', 'أحمر'], ['#7dffb0', 'أخضر']];
 const ASPECTS = [
   { k: '16:9', v: 16 / 9, ar: 'تلفزيون ويوتيوب' }, { k: '1.85', v: 1.85, ar: 'سينما' }, { k: '2.39', v: 2.39, ar: 'سينما سكوب' },
   { k: '4:3', v: 4 / 3, ar: 'كلاسيكي' }, { k: '1:1', v: 1, ar: 'مربع' }, { k: '9:16', v: 9 / 16, ar: 'عمودي (ريلز)' }

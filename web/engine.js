@@ -29,12 +29,14 @@ function init3D() {
   renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.autoClear = false;
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
   scene = new THREE.Scene();
+  SKY = makeSky(); scene.add(SKY.mesh); pmrem = new THREE.PMREMGenerator(renderer); envScene = new THREE.Scene(); ENVSKY = makeSky(true); envScene.add(ENVSKY.mesh);
   hemi = new THREE.HemisphereLight(0xffffff, 0x444444, .6); scene.add(hemi);
   sun = new THREE.DirectionalLight(0xffffff, .9); sun.castShadow = true;
   const ms = innerWidth < 700 ? 1024 : 2048; sun.shadow.mapSize.set(ms, ms);
   const c = sun.shadow.camera; c.left = -16; c.right = 16; c.top = 16; c.bottom = -16; c.near = .5; c.far = 90;
-  sun.shadow.bias = -.0004; sun.shadow.normalBias = .03; scene.add(sun); scene.add(sun.target);
+  sun.shadow.bias = -.0005; sun.shadow.normalBias = .045; scene.add(sun); scene.add(sun.target);
   shotCam = new THREE.PerspectiveCamera(40, 16 / 9, .02, 600);
   tmpCam = new THREE.PerspectiveCamera(40, 16 / 9, .02, 600);
   dirCam = new THREE.PerspectiveCamera(42, 1.6, .05, 900); dirCam.layers.enable(1);
@@ -53,6 +55,48 @@ function init3D() {
   new ResizeObserver(onResize).observe(monEl);
   onResize();
   initPointer();
+}
+/* ---------- sky dome and image-based light ---------- */
+let SKY = null, ENVSKY = null, pmrem = null, envScene = null, envRT = null, iblKey = '', envT = 0;
+function makeSky(forEnv) {
+  const u = { top: { value: new THREE.Color() }, hz: { value: new THREE.Color() }, gnd: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunC: { value: new THREE.Color() }, sunK: { value: 1 } };
+  const m = new THREE.ShaderMaterial({
+    uniforms: u, side: THREE.BackSide, depthWrite: false, depthTest: !forEnv, fog: false,
+    vertexShader: 'varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform vec3 top; uniform vec3 hz; uniform vec3 gnd; uniform vec3 sunDir; uniform vec3 sunC; uniform float sunK; varying vec3 vD;
+      void main(){ vec3 d = normalize(vD); float y = d.y;
+        vec3 c = y > 0.0 ? mix(hz, top, pow(smoothstep(0.0, 0.62, y), 0.75)) : mix(hz, gnd, smoothstep(0.0, 0.1, -y));
+        float s = max(dot(d, normalize(sunDir)), 0.0); c += sunC * (pow(s, 900.0) * 9.0 + pow(s, 14.0) * 0.22) * sunK;
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <encodings_fragment>
+      }`
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(forEnv ? 50 : 420, 32, 16), m); mesh.frustumCulled = false; mesh.renderOrder = -10;
+  if (!forEnv) mesh.onBeforeRender = (r, sc, cam) => { mesh.position.setFromMatrixPosition(cam.matrixWorld); mesh.updateMatrixWorld(); };
+  return { mesh, u };
+}
+const INDOOR = { room: 1, house: 1, classroom: 1, studio: 1 };
+function setEnvK(k) { scene.traverse(o => { const m = o.material; if (!m) return; (Array.isArray(m) ? m : [m]).forEach(x => { if (x.isMeshStandardMaterial && x.envMapIntensity !== k) x.envMapIntensity = k; }); }); RT.envK = k; }
+function rebuildEnv() {
+  if (RT.exporting) { RT.envPending = true; return; }
+  envT = 0; const old = envRT; envRT = pmrem.fromScene(envScene, 0, .1, 100); scene.environment = envRT.texture; if (old) old.dispose(); RT.dirty = true;
+}
+function lerpTod(h) {
+  const K = TOD; if (h <= K[0].h) return K[0]; if (h >= K[K.length - 1].h) return K[K.length - 1];
+  let i = 0; while (K[i + 1].h < h) i++; const a = K[i], b = K[i + 1], t = (h - a.h) / (b.h - a.h), o = { h };
+  ['sky', 'hz', 'hs', 'hg', 'sc'].forEach(k => o[k] = new THREE.Color(a[k]).lerp(new THREE.Color(b[k]), t));
+  ['hi', 'si', 'el', 'lamp'].forEach(k => o[k] = lerp(a[k], b[k], t)); return o;
+}
+/* effective lighting of the current scene: preset + time of day + manual overrides */
+function lightOf(S) {
+  S = S || ST; const P = LIGHTS[S.light] || LIGHTS.day, o = S.lt || {};
+  let L;
+  if (o.tod != null) { const k = lerpTod(o.tod); L = Object.assign({}, k, { az: 60 - (o.tod - 12) * 12 }); if (S.light === 'warm') L.lamp = Math.max(L.lamp, .9); }
+  else { const sp = P.sp; L = Object.assign({}, P, { az: Math.atan2(sp[0], sp[2]) / D2R, el: Math.atan2(sp[1], Math.hypot(sp[0], sp[2])) / D2R }); ['sky', 'hz', 'hs', 'hg', 'sc'].forEach(k => L[k] = new THREE.Color(P[k])); }
+  if (o.az != null) L.az = o.az;
+  L.si *= o.si != null ? o.si : 1; L.hi *= o.amb != null ? o.amb : 1; L.exp = o.exp || 1; L.tod = o.tod != null ? o.tod : P.tod;
+  return L;
 }
 function onResize() {
   const W = monEl.clientWidth, H = monEl.clientHeight; if (!W || !H) return;
@@ -76,30 +120,49 @@ function syncEnv() {
   applyLight(); RT.dirty = true;
 }
 function applyLight() {
-  const L = LIGHTS[ST.light] || LIGHTS.day;
-  hemi.color.set(L.hs); hemi.groundColor.set(L.hg); hemi.intensity = L.hi;
-  sun.color.set(L.sc); sun.intensity = L.si; sun.position.set(L.sp[0] * 1.5, L.sp[1] * 1.5, L.sp[2] * 1.5); sun.target.position.set(0, 0, 0);
-  const wx = ST.weather || 'clear', sky = new THREE.Color(L.sky);
-  if (wx === 'fog') { sky.lerp(new THREE.Color('#c9c9c4'), .65); hemi.intensity *= .95; sun.intensity *= .55; }
-  if (wx === 'rain') { sky.lerp(new THREE.Color('#7f8a94'), .6); hemi.intensity *= .85; sun.intensity *= .4; }
-  scene.background = sky;
-  scene.fog = wx === 'fog' ? new THREE.Fog(sky, 2.5, 30) : wx === 'rain' ? new THREE.Fog(sky, 10, 70) : envInfo && envInfo.fog ? new THREE.Fog(sky, envInfo.fog[0], envInfo.fog[1]) : null;
+  const L = lightOf(), wx = ST.weather || 'clear', inside = !!INDOOR[ST.env];
+  const top = L.sky.clone(), hz = L.hz.clone(), sunC = L.sc.clone();
+  let si = L.si, hi = L.hi;
+  if (wx === 'fog') { const f = new THREE.Color('#c9c9c4'); top.lerp(f, .75); hz.lerp(f, .85); hi *= .95; si *= .5; }
+  if (wx === 'rain') { const f = new THREE.Color('#7f8a94'); top.lerp(f, .7); hz.lerp(f, .75); hi *= .85; si *= .35; }
+  hemi.color.copy(L.hs); hemi.groundColor.copy(L.hg); hemi.intensity = hi * .72;
+  const el = Math.max(L.el, 4) * D2R, az = L.az * D2R, R = 28;
+  const ctr = actionCenter(), span = ctr.r;
+  sun.color.copy(sunC); sun.intensity = si * (L.el < 0 ? .35 : 1);
+  sun.position.set(ctr.x + Math.sin(az) * Math.cos(el) * R, Math.sin(el) * R, ctr.z + Math.cos(az) * Math.cos(el) * R); sun.target.position.set(ctr.x, 0, ctr.z); sun.target.updateMatrixWorld();
+  const c = sun.shadow.camera; c.left = -span; c.right = span; c.top = span; c.bottom = -span; c.far = 80; c.updateProjectionMatrix();
+  renderer.toneMappingExposure = L.exp;
+  const sd = new THREE.Vector3(Math.sin(az) * Math.cos(L.el * D2R), Math.sin(L.el * D2R), Math.cos(az) * Math.cos(L.el * D2R));
+  const gnd = L.hg.clone().multiplyScalar(.6);
+  [SKY, ENVSKY].forEach((K, i) => { K.u.top.value.copy(top); K.u.hz.value.copy(hz); K.u.gnd.value.copy(i ? L.hg : gnd); K.u.sunDir.value.copy(sd); K.u.sunC.value.copy(sunC); K.u.sunK.value = (L.el < -1 ? 0 : 1) * (wx === 'clear' ? 1 : .25) * (i ? 3 : 1); });
+  scene.background = null;
+  scene.fog = wx === 'fog' ? new THREE.Fog(hz, 2.5, 30) : wx === 'rain' ? new THREE.Fog(hz, 10, 70) : envInfo && envInfo.fog ? new THREE.Fog(hz, envInfo.fog[0], envInfo.fog[1]) : null;
   ensureRain(wx === 'rain');
+  const ek = [top.getHex(), hz.getHex(), sunC.getHex(), Math.round(L.az), Math.round(L.el), wx].join('|');
+  if (ek !== iblKey) { iblKey = ek; clearTimeout(envT); if (envRT) envT = setTimeout(rebuildEnv, 90); else rebuildEnv(); }
+  setEnvK(inside ? .32 : .55);
   const all = LAMPS.slice(); Object.values(OBJ).forEach(o => (o.lamps || []).forEach(l => all.push(l)));
   const cap = innerWidth < 700 ? 3 : 5, wp = new THREE.Vector3();
   if (envG) envG.updateMatrixWorld(true); Object.values(OBJ).forEach(o => o.root.updateMatrixWorld(true));
-  all.forEach(l => { l.light.getWorldPosition(wp); l.d = wp.x * wp.x + wp.z * wp.z; }); all.sort((a, b) => a.d - b.d);
+  all.forEach(l => { l.light.getWorldPosition(wp); l.d = (wp.x - ctr.x) ** 2 + (wp.z - ctr.z) ** 2; }); all.sort((a, b) => a.d - b.d);
   all.forEach((l, i) => { l.light.visible = L.lamp > 0 && i < cap; l.light.intensity = L.lamp; l.mats.forEach(m => m.emissiveIntensity = L.lamp > 0 ? Math.min(1.2, .35 + L.lamp * .5) : 0); });
   RT.dirty = true;
 }
+function actionCenter() {
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, n = 0;
+  const add = (x, z) => { if (!isFinite(x) || !isFinite(z)) return; x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); n++; };
+  ST.items.forEach(s => { add(s.x, s.z); (s.actions || []).forEach(a => { if (a.tx != null) add(a.tx, a.tz); }); });
+  if (!n) return { x: 0, z: 0, r: 14 };
+  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: clamp(Math.max(x1 - x0, z1 - z0) / 2 + 7, 9, 34) };
+}
 
 /* ---------- items ---------- */
-function itemHash(s) { const o = Object.assign({}, s); delete o.x; delete o.z; delete o.rot; delete o.actions; delete o.name; delete o.pose; delete o.id; return JSON.stringify(o); }
+function itemHash(s) { const o = Object.assign({}, s); ['x', 'z', 'rot', 'actions', 'name', 'pose', 'id', 'power', 'lc', 'angle', 'tilt', 'aim'].forEach(k => delete o[k]); return JSON.stringify(o); }
 function buildItem(s) {
   let o;
   if (s.kind === 'human') o = makeHuman(s);
   else if (s.kind === 'animal') { o = makeAnimal(s.type, s.color); }
-  else { const lamps = []; const inner = makeProp(s.type, s.color, lamps); const root = G(); root.add(inner); o = { root, kind: 'prop', lamps, wheels: inner.userData.wheels || null }; }
+  else { const lamps = []; const inner = makeProp(s.type, s.color, lamps); const root = G(); root.add(inner); o = { root, kind: 'prop', lamps, wheels: inner.userData.wheels || null, film: inner.userData.film || null }; }
   if (s.kind !== 'human') { const sc = s.scale || 1; o.root.scale.setScalar(sc); o.sc = sc; _box.setFromObject(o.root); o.lastR = Math.max(_box.max.x - _box.min.x, _box.max.z - _box.min.z) / 2; }
   return o;
 }
@@ -115,8 +178,8 @@ function syncItems() {
       if (o.lamps && o.lamps.length) lampsChanged = true;
     }
   }
-  if (lampsChanged) applyLight();
-  RT.dirty = true;
+  if (lampsChanged) applyLight(); else setEnvK(RT.envK || .5);
+  RT.gizmoTM = true; RT.dirty = true;
 }
 function blendPose(a, b, t) { for (const k in b) a[k] = lerp(a[k] || 0, b[k], t); }
 const wrapA = a => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
@@ -212,7 +275,7 @@ function poseHuman(o, st, t) {
   o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone'; if (o.hold.tphone) o.hold.tphone.visible = st.hold === 'tphone';
   const bl = st.hold === 'binoc' ? 0 : blinkAt(t, o.seed), open = Math.max(st.talk * (.5 + .5 * Math.sin(st.fx * 15)) * (.55 + .45 * Math.sin(st.fx * 5.3 + 1)), st.laugh * (.65 + .2 * Math.sin(st.fx * 18)), st.hold === null && P.lShX > 2 ? .5 : 0, st.dance * .35);
   r.eyes.forEach(e => { e.g.scale.y = 1 - .92 * bl; e.p.position.x = st.gazeX * r.r * .055; e.p.position.y = st.gazeY * r.r * .05; });
-  r.mouth.scale.y = .2 + open * .85; r.mouth.scale.x = 1.25 + st.laugh * .25;
+  r.mouth.scale.y = .2 + open * .85; r.mouth.scale.x = 1.25 + st.laugh * .25; if (r.lipLo) r.lipLo.position.y = r.r * (.55 - open * .1);
   const browUp = (P.lShX > 2 ? .07 : 0) + st.laugh * .03; r.brows.forEach(b => { b.position.y = r.r * 1.33 + browUp * r.r; });
 }
 function poseAnimal(o, st, t) {
@@ -230,7 +293,19 @@ function applyItem(o, s, t) {
   if (o.kind === 'human') poseHuman(o, st, t);
   else if (o.kind === 'animal') poseAnimal(o, st, t);
   else if (o.wheels) o.wheels.forEach(w => w.rotation.x = st.gait / .34);
+  if (o.film) poseFilm(o, s, t);
   o.st = st; return st;
+}
+/* film lights: power, colour, beam, tilt, and optional aim at a person */
+function poseFilm(o, s, t) {
+  const F = o.film, L = F.light, pw = s.power == null ? 1 : s.power;
+  L.color.set(s.lc || '#fff1dc'); F.em.color.set(s.lc || '#fff1dc'); F.em.emissive.set(s.lc || '#fff1dc'); F.em.emissiveIntensity = pw > 0 ? 1 : .05;
+  L.visible = pw > 0;
+  if (F.kind === 'bulb') { L.intensity = pw * 1.6; return; }
+  L.intensity = pw * (F.kind === 'spot' ? 2.6 : 1.5); L.angle = clamp((s.angle || (F.kind === 'spot' ? 30 : 60)) * D2R, .08, 1.45);
+  let yaw = 0, pit = (s.tilt == null ? -15 : s.tilt) * D2R;
+  if (s.aim) { const L2 = lmOf(s.aim, t); if (L2) { const T = (L2.chest || L2.eye).clone(); o.root.updateMatrixWorld(); const hp = new THREE.Vector3(); F.head.getWorldPosition(hp); const v = T.sub(hp), rot = (o.st ? o.st.rot : (s.rot || 0) * D2R); yaw = wrapA(Math.atan2(v.x, v.z) - rot); pit = Math.atan2(v.y, Math.hypot(v.x, v.z)); } }
+  F.head.rotation.set(-pit, yaw, 0, 'YXZ');
 }
 function applyAll(t) { for (const s of ST.items) { const o = OBJ[s.id]; if (o) applyItem(o, s, t); } }
 
@@ -514,8 +589,8 @@ function weatherTick(t, R) {
 function setBackdrop(img) {
   if (bdMesh) { scene.remove(bdMesh); bdMesh.material.map && bdMesh.material.map.dispose(); bdMesh = null; }
   if (!img) return;
-  const tex = new THREE.Texture(img); tex.needsUpdate = true;
-  bdMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, fog: false }));
+  const tex = new THREE.Texture(img); tex.needsUpdate = true; tex.encoding = THREE.sRGBEncoding;
+  bdMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, fog: false, toneMapped: false }));
   bdMesh.userData.asp = img.width / img.height; scene.add(bdMesh); RT.dirty = true;
 }
 function placeBackdrop(R) {
@@ -552,8 +627,10 @@ function programFrame(t) {
 /* ---------- drawing ---------- */
 function vp(x, y, w, h, H) { renderer.setViewport(x, H - y - h, w, h); renderer.setScissor(x, H - y - h, w, h); }
 function pipRect(W, H, a) { const st = document.body.classList.contains('stage'), nar = innerWidth <= 640, b = st ? (nar ? 122 : 84) + (RT.src !== 'edit' ? 60 : 0) : 12; let w = Math.round(Math.min(W * (W < 600 ? .3 : st ? .22 : .26), 300)), h = Math.round(w / a); if (h > H * .38) { h = Math.round(H * .38); w = Math.round(h * a); } return { x: 12, y: H - h - b, w, h }; }
+function gizmoTM() { RT.gizmoTM = false; scene.traverse(o => { if (o.layers.mask === 2 && o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.toneMapped !== false) { m.toneMapped = false; m.needsUpdate = true; } }); }); }
 function draw() {
   const W = monEl.clientWidth, H = monEl.clientHeight; if (!W || !H || !ST) return;
+  if (RT.gizmoTM !== false) gizmoTM();
   const asp = aspV(); let fw = W, fh = W / asp; if (fh > H) { fh = H; fw = H * asp; } fw = Math.floor(fw); fh = Math.floor(fh);
   const fx = Math.floor((W - fw) / 2), fy = Math.floor((H - fh) / 2); RT.frameRect = { x: fx, y: fy, w: fw, h: fh };
   const pc = progCam(); let R = pc ? computeCam(pc.cfg, pc.p, pc.tb, pc.tn) : null, R2 = null, mixA = 0, fadeA = 0;

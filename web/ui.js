@@ -27,7 +27,7 @@ const IC = {
   walk: sv('<circle cx="13" cy="4" r="2"/><path d="M10 22l2-7-3-3 1-5 4 3h4M9 12l-3 2-2 5"/>'), android: sv('<path d="M7 9h10v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/><path d="M7 9a5 5 0 0 1 10 0M9 18v3M15 18v3M4 10v5M20 10v5M9 6l-1-2M15 6l1-2"/>'), dl: sv('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'),
   tLearn: sv('<path d="M2 7l10-4 10 4-10 4z"/><path d="M6 9v5c0 1.5 3 3 6 3s6-1.5 6-3V9"/>')
 };
-const TABS = [['scene', 'المشهد', 'tScene'], ['cast', 'الشخصيات', 'tCast'], ['props', 'العناصر', 'tProps'], ['cams', 'الكاميرات', 'cam'], ['edit', 'المونتاج', 'tEdit'], ['learn', 'تعلّم', 'tLearn']];
+function tabsNow() { const t = [['scene', 'المشهد', 'tScene'], ['items', 'العناصر', 'tCast'], ['cams', 'الكاميرات', 'cam'], ['edit', 'المونتاج', 'tEdit']]; if (PRJ && PRJ.lessons) t.push(['learn', 'تعلّم', 'tLearn']); return t; }
 const FLAG_INFO = {
   on: { c: 'ok', i: '✓', s: 'قطع نظيف', t: 'قطع على الحركة', d: 'القطع يقع أثناء حركة الشخصية، فتتبع العين الحركة ويختفي القطع.' },
   late: { c: 'warn', i: '!', s: 'قطع متأخر', t: 'قطع بعد انتهاء الحركة', d: 'الحركة انتهت قبل القطع بقليل فيبدو القطع مكشوفًا. اسحب نقطة القطع لتقع أثناء الحركة.' },
@@ -39,14 +39,16 @@ const FLAG_INFO = {
 const ENV_SW = { studio: 'linear-gradient(#a3a09c,#6e6b68)', room: 'linear-gradient(#d9c6aa 58%,#8f6541 58%)', house: 'linear-gradient(#efe7da 52%,#2f7a64 52% 68%,#2b4f8a 68%)', classroom: 'linear-gradient(#efe6cf 40%,#2e4a3c 40% 72%,#cfc6b2 72%)', street: 'linear-gradient(#c9dced 36%,#e2c9a0 36% 74%,#4a4b4f 74%)', medina: 'linear-gradient(#e8a578 40%,#c47f4b 40% 80%,#d2ae80 80%)', park: 'linear-gradient(#c9dced 42%,#5f8a3a 42%)', desert: 'linear-gradient(#e8a578 48%,#ddb27a 48%)', cafe: 'linear-gradient(#efe7da 45%,#b5523b 45% 58%,#cbbfa9 58%)', alley: 'linear-gradient(90deg,#6f9fd6 30%,#cfc6b2 30% 70%,#8fb5e4 70%)', beach: 'linear-gradient(#c9dced 30%,#2f7fa8 30% 55%,#e3c999 55%)', rooftop: 'linear-gradient(#e8a578 50%,#c97a52 50%)', village: 'linear-gradient(#c9dced 40%,#c9a46b 40% 62%,#b48d5c 62%)', souk: 'linear-gradient(#c9dced 34%,#b5523b 34% 50%,#d2b385 50%)', road: 'linear-gradient(#c9dced 38%,#8fae5a 38% 56%,#4a4b4f 56%)' };
 const KEY = 'kadr-project-v1';
 const HIST = { s: [], i: -1 };
-let TAB = 'learn', PPS = 50;
+let TAB = 'scene', PPS = 50, ITEMCAT = 'people';
 
 /* ---------- small builders ---------- */
 const chip = (label, on, attrs) => `<button class="chip${on ? ' on' : ''}" ${attrs || ''}>${label}</button>`;
 function outFmt(f, v) {
   switch (f) {
     case 'h': return v + ' سم'; case 'build': return Math.round(v * 100) + '%'; case 'scale': return '×' + fmt(v, 2);
-    case 'rot': case 'side': case 'eAdj': case 'roll': case 'yaw': case 'pitch': return v + '°'; case 'py': return fmt(v, 2) + ' م'; case 'dOff': case 'amt': return '×' + fmt(v, 2);
+    case 'rot': case 'side': case 'eAdj': case 'roll': case 'yaw': case 'pitch': case 'az': case 'angle': case 'tilt': return v + '°';
+    case 'tod': { const hh = Math.floor(v), mm = Math.round((v - hh) * 60); return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); }
+    case 'si': case 'amb': case 'exp': case 'power': return '×' + fmt(v, 2); case 'py': return fmt(v, 2) + ' م'; case 'dOff': case 'amt': return '×' + fmt(v, 2);
     case 'shake': return Math.round(v * 100) + '%'; case 'dist': case 'size': return v + ' م'; default: return v;
   }
 }
@@ -102,7 +104,7 @@ function normalize(S) {
 /* ---------- history & persistence ---------- */
 let lastLight = null;
 function refreshWorld() {
-  syncEnv(); syncItems(); const lk = ST.light + ST.env + (ST.weather || ''); if (lastLight !== lk) { applyLight(); lastLight = lk; }
+  syncEnv(); syncItems(); const lk = ST.light + ST.env + (ST.weather || '') + JSON.stringify(ST.lt || {}); if (lastLight !== lk) { applyLight(); lastLight = lk; }
   if (RT.sel && !itemById(RT.sel)) RT.sel = null;
   if (RT.cam && !camById(RT.cam)) RT.cam = ST.cams[0] ? ST.cams[0].id : null;
   if (RT.src !== 'edit' && !camById(RT.src)) RT.src = 'edit';
@@ -132,17 +134,17 @@ function hideHint() { $('#hint').classList.remove('show'); }
 async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('تم النسخ'); } catch (e) { openModal('انسخ النص', `<p class="note">حدّد النص وانسخه يدويًا.</p><textarea readonly>${esc(t)}</textarea>`); } }
 
 /* ---------- tabs & panels ---------- */
-function renderTabs() { $('#tabs').innerHTML = TABS.map(([k, t, ic]) => `<button data-tab="${k}" class="${TAB === k ? 'on' : ''}">${IC[ic]}<span>${t}</span></button>`).join(''); }
+function renderTabs() { const T = tabsNow(); if (!T.some(t => t[0] === TAB)) TAB = 'scene'; $('#tabs').innerHTML = T.map(([k, t, ic]) => `<button data-tab="${k}" class="${TAB === k ? 'on' : ''}">${IC[ic]}<span>${t}</span></button>`).join(''); }
 function switchTab(k) { TAB = k; renderTabs(); renderPanel(); if (k !== 'cams' && RT.camPrevOn) RT.camPrevOn = false; }
 function renderAll() { renderPanel(); renderTL(); updTransport(); renderCtx(); renderSUI(); }
 function renderPanel() {
   const p = $('#panel');
-  const f = { scene: pScene, cast: pCast, props: pProps, cams: pCams, edit: pEdit, learn: pLearn }[TAB];
+  const f = { scene: pScene, items: pItems, cast: pItems, props: pItems, cams: pCams, edit: pEdit, learn: pLearn }[TAB] || pScene;
   p.innerHTML = f();
 }
 function pScene() {
   return `<section><h3>المكان</h3><div class="grid2">${Object.entries(ENVS).map(([k, e]) => `<button class="tile${ST.env === k ? ' on' : ''}" data-act="env" data-v="${k}"><span class="sw" style="background:${ENV_SW[k]}"></span><span>${e.ar}</span></button>`).join('')}</div></section>
-  <section><h3>الإضاءة والوقت</h3><div class="chips">${Object.entries(LIGHTS).map(([k, l]) => chip(l.ar, ST.light === k, `data-act="light" data-v="${k}"`)).join('')}</div><p class="note" style="margin-top:8px">الإضاءة جزء من اللغة: الغروب حنين ودفء، والليل غموض وخطر.</p>
+  ${lightSection()}
   <h3 style="margin-top:14px">الطقس</h3><div class="chips">${Object.entries(WEATHER).map(([k, v]) => chip(v, (ST.weather || 'clear') === k, `data-act="weather" data-v="${k}"`)).join('')}</div></section>
   <section><h3>نسبة العرض <small>Aspect ratio</small></h3><div class="chips">${ASPECTS.map(a => chip(`<bdi dir="ltr">${a.k}</bdi> <small>${a.ar}</small>`, ST.aspect === a.k, `data-act="aspect" data-v="${a.k}"`)).join('')}</div></section>
   <section><h3>خلفية من صورة</h3><p class="note">صوّر مكانًا حقيقيًا بهاتفك وضعه خلف المشهد كخلفية مسطّحة، مثل الخلفيات المرسومة في الاستوديوهات. المكان لا يتحول إلى مجسّم، لكنك ترى شخصياتك وكادراتك أمامه. تعمل أفضل مع «استوديو فارغ» أو الأماكن المفتوحة.</p>
@@ -150,6 +152,37 @@ function pScene() {
   ${RT.bdImg && ST.bd ? `<div class="row"><span>الوضع</span><div class="chips">${chip('خلف الهدف دائمًا', ST.bd.follow, 'data-act="bdMode" data-v="1"')}${chip('ثابتة في المكان', !ST.bd.follow, 'data-act="bdMode" data-v="0"')}</div></div>${rng('المسافة', 'dist', 2, 60, 1, ST.bd.dist, 'bd')}${!ST.bd.follow ? rng('الارتفاع', 'size', 3, 40, 1, ST.bd.size, 'bd') : ''}` : ''}</section>
   <section><h3>أدوات الكادر</h3><div class="chips">${chip('شبكة الأثلاث', ST.ov.thirds, 'data-act="ov" data-v="thirds"')}${chip('الهامش الآمن', ST.ov.safe, 'data-act="ov" data-v="safe"')}${chip('بطاقة اللقطة', ST.ov.lbl, 'data-act="ov" data-v="lbl"')}</div></section>
   <section><h3>المشروع</h3><p class="note">${PRJ ? `«${esc(PRJ.name)}»، المشهد ${PRJ.cur + 1} من ${PRJ.scenes.length}. ` : ''}كل مشهد له مكانه وشخصياته ولقطاته، ويُحفظ كل شيء تلقائيًا في هذا الجهاز. احفظه كملف لتنقله إلى جهاز آخر أو ترسله لتلامذتك.</p><div class="btns"><button class="btn" data-act="scenes">${IC.scenes} المشاهد</button><button class="btn" data-act="saveFile">${IC.dl} احفظ المشروع كملف</button><button class="btn" data-act="home">${IC.home} كل المشاريع</button></div></section>${appSection()}`;
+}
+function lightSection() {
+  const L = lightOf(), o = ST.lt || {}, h = s => itemById(RT.sel) && itemById(RT.sel).kind !== 'prop';
+  return `<section><h3>الإضاءة والوقت</h3><div class="chips">${Object.entries(LIGHTS).map(([k, l]) => chip(l.ar, ST.light === k && o.tod == null, `data-act="light" data-v="${k}"`)).join('')}</div>
+  ${rng('الساعة', 'tod', 5, 23.5, .25, o.tod != null ? o.tod : L.tod, 'lt')}
+  <details class="more"${o.az != null || o.si != null || o.amb != null || o.exp != null ? ' open' : ''}><summary>تحكم دقيق في الضوء</summary>
+  ${rng('اتجاه الشمس', 'az', -180, 180, 5, Math.round(o.az != null ? o.az : L.az), 'lt')}${rng('قوة الشمس', 'si', 0, 2, .05, o.si != null ? o.si : 1, 'lt')}${rng('الضوء المحيط', 'amb', 0, 2, .05, o.amb != null ? o.amb : 1, 'lt')}${rng('التعريض', 'exp', .4, 2.5, .05, o.exp || 1, 'lt')}
+  <div class="btns"><button class="btn" data-act="ltReset">${IC.undo} إعادة الضبط</button></div></details>
+  <h4 class="sub">أضواء التصوير</h4><div class="btns"><button class="btn" data-act="add" data-v="spot">${IC.plus} كشاف</button><button class="btn" data-act="add" data-v="softbox">${IC.plus} ضوء ناعم</button><button class="btn" data-act="add" data-v="bulb">${IC.plus} لمبة</button><button class="btn pri" data-act="threePt">إضاءة ثلاثية</button></div>
+  <p class="note">«الإضاءة الثلاثية» تضع ضوءًا رئيسيًا وضوء تعبئة وضوءًا خلفيًا موجّهة نحو الشخصية المختارة.</p></section>`;
+}
+const ICATS = [['people', 'أشخاص'], ['animals', 'حيوانات'], ['things', 'أشياء'], ['lights', 'أضواء']];
+function pItems() {
+  const s = itemById(RT.sel); let gal;
+  if (ITEMCAT === 'people') gal = `<div class="grid3">${Object.entries(CAST).map(([k, c]) => `<button class="tile" data-act="add" data-v="${k}">${personIcon(c)}<span>${c.ar}</span></button>`).join('')}</div>`;
+  else if (ITEMCAT === 'animals') gal = `<div class="grid5">${Object.entries(ANIMALS).map(([k, a]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:${a.color};border-radius:50%"></span><span>${a.ar}</span></button>`).join('')}</div>`;
+  else if (ITEMCAT === 'lights') gal = `<div class="grid3">${Object.entries(PROPS).filter(([k, p]) => p.light).map(([k, p]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:radial-gradient(#fff3d6,#f2a23a 60%,#3a2a20)"></span><span>${p.ar}</span></button>`).join('')}<button class="tile" data-act="threePt"><span class="sw" style="background:conic-gradient(#ffcf9a 0 33%,#fff1dc 0 66%,#dce9ff 0)"></span><span>إضاءة ثلاثية</span></button></div>`;
+  else if (ITEMCAT === 'mine') gal = typeof libGallery === 'function' ? libGallery() : '';
+  else gal = `<div class="grid3">${Object.entries(PROPS).filter(([k, p]) => !p.light).map(([k, p]) => `<button class="tile" data-act="add" data-v="${k}"><span class="sw" style="background:${p.color}"></span><span>${p.ar}</span></button>`).join('')}</div>`;
+  const cats = ICATS.concat(typeof libGallery === 'function' ? [['mine', 'مكتبتي']] : []);
+  return `<section><h3>أضف إلى المشهد</h3><div class="chips seg1">${cats.map(([k, t]) => chip(t, ITEMCAT === k, `data-act="icat" data-v="${k}"`)).join('')}</div><div style="margin-top:10px">${gal}</div></section>
+  <section><h3>في المشهد <small>${ST.items.length}</small></h3>${listChips(ST.items)}</section>
+  ${s ? (s.kind === 'human' ? edHuman(s) : s.kind === 'animal' ? edAnimal(s) : PROPS[s.type] && PROPS[s.type].light ? edLight(s) : edProp(s)) + edActs(s) : `<section><p class="note">اضغط على أي عنصر في الكادر أو في «عين المخرج» لتعديله وتحريكه.</p></section>`}`;
+}
+function edLight(s) {
+  const opts = ST.items.filter(x => x.id !== s.id && !(PROPS[x.type] && PROPS[x.type].light)).map(x => `<option value="${x.id}"${x.id === s.aim ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
+  return `<section>${edHead(s)}${rng('القوة', 'power', 0, 3, .05, s.power != null ? s.power : 1, 'item')}
+  ${s.type !== 'bulb' ? rng('اتساع الحزمة', 'angle', 8, 85, 1, s.angle || (s.type === 'spot' ? 30 : 60), 'item') : ''}
+  <div class="row"><span>لون الضوء</span><div class="swatches">${LIGHT_COLORS.map(([c, t]) => `<button class="swatch${(s.lc || '#fff1dc') === c ? ' on' : ''}" style="background:${c}" data-act="set" data-s="item" data-f="lc" data-v="${c}" aria-label="${t}" title="${t}"></button>`).join('')}</div></div>
+  ${s.type !== 'bulb' ? `<div class="row"><span>موجّه نحو</span><select data-f="aim" data-s="item"><option value="">اتجاه ثابت</option>${opts}</select></div>${s.aim ? '' : rng('الميل', 'tilt', -80, 40, 1, s.tilt != null ? s.tilt : -15, 'item')}` : ''}
+  ${rng('الاتجاه', 'rot', -180, 180, 1, s.rot || 0, 'item')}</section>`;
 }
 function listChips(arr) { return arr.length ? `<div class="chips">${arr.map(h => chip(esc(h.name), h.id === RT.sel, `data-act="sel" data-v="${h.id}"`)).join('')}</div>` : '<p class="note">لا يوجد شيء بعد.</p>'; }
 function pCast() {
@@ -306,7 +339,7 @@ function updTransport() {
   $('#bUndo').disabled = HIST.i <= 0; $('#bRedo').disabled = HIST.i >= HIST.s.length - 1;
 }
 function play(from0) { if (!ST.shots.length) return toast('أضف لقطة أولًا'); closePop(); hideCtx(); RT.src = 'edit'; RT.quiz = null; RT.camPrevOn = false; if (from0 || RT.t >= totalDur() - .02) RT.t = 0; RT.playing = true; RT.view = 'cam'; RT.lastShot = -1; updTransport(); renderSUI(); RT.dirty = true; }
-function pause() { RT.playing = false; RT.film = false; updTransport(); renderSUI(); if (TAB === 'cast' || TAB === 'props') renderPanel(); }
+function pause() { RT.playing = false; RT.film = false; updTransport(); renderSUI(); if (TAB === 'items') renderPanel(); }
 function jumpCut(d) { const st = shotStarts().concat([totalDur()]); RT.src = 'edit'; let t = RT.t; if (d > 0) t = st.find(x => x > RT.t + .01) ?? totalDur(); else t = [...st].reverse().find(x => x < RT.t - .05) ?? 0; RT.t = Math.min(t, Math.max(0, totalDur() - .001)); RT.dirty = true; updPH(true); }
 function setView(v) { RT.view = v; updTransport(); renderSUI(); RT.dirty = true; hint(v === 'dir' ? 'عين المخرج: انقر على عنصر لتحديده، اسحب السهم البرتقالي لتدويره، واضغط مطولًا على الأرض ليمشي إليها.' : 'عين الكاميرا: انقر على عنصر لتحديده، واسحب داخل الكادر لتدوير الكاميرا.', 4200, 'view-' + v); }
 function cine(on) { document.body.classList.toggle('cine', on); if (on) { RT.prevView = RT.view; RT.view = 'cam'; play(true); hint('اضغط زر الرجوع أو Esc للخروج', 2500, 'cine'); } else { RT.view = RT.prevView || 'cam'; renderSUI(); } updTransport(); setTimeout(onResize, 30); }
@@ -330,7 +363,7 @@ window.onDrawn = (R, pc) => {
   updPH(); if (window.posCtx) posCtx();
 };
 window.onSwapView = () => setView(RT.view === 'cam' ? 'dir' : 'cam');
-window.onSelectItem = id => { RT.sel = id; RT.ctxCam = null; if (!id) RT.selAct = null; renderCtx(true); if (id) { const s = itemById(id); const tab = s.kind === 'prop' ? 'props' : 'cast'; if (TAB !== tab) switchTab(tab); else renderPanel(); } else if (TAB === 'cast' || TAB === 'props') renderPanel(); renderTL(); RT.dirty = true; };
+window.onSelectItem = id => { RT.sel = id; RT.ctxCam = null; if (!id) RT.selAct = null; renderCtx(true); if (id) { const s = itemById(id); if (TAB !== 'items') switchTab('items'); else renderPanel(); } else if (TAB === 'items') renderPanel(); renderTL(); RT.dirty = true; };
 window.onSelectCam = id => { RT.cam = id; RT.src = id; RT.playing = false; RT.sel = null; RT.ctxCam = id; if (!stageOn()) switchTab('cams'); updTransport(); renderCtx(true); RT.dirty = true; };
 window.onItemMoved = () => commit();
 window.onLongPressGround = g => {
@@ -433,14 +466,23 @@ function handleBd(input) {
 function loadBd() { if (!ST.bd) return; let u = null; try { u = localStorage.getItem(bdKey()); } catch (e) { } if (!u) return; const img = new Image(); img.onload = () => { RT.bdImg = u; setBackdrop(img); if (TAB === 'scene') renderPanel(); }; img.src = u; }
 
 /* ---------- event wiring ---------- */
-function scopeObj(s) { return s === 'item' ? itemById(RT.sel) : s === 'cam' ? camById(RT.cam) : s === 'bd' ? ST.bd : s === 'st' ? ST : null; }
+function scopeObj(s) { return s === 'item' ? itemById(RT.sel) : s === 'cam' ? camById(RT.cam) : s === 'bd' ? ST.bd : s === 'st' ? ST : s === 'lt' ? (ST.lt = ST.lt || {}) : null; }
 function onPanelClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   if (e.target.closest('select,input,textarea') && b.dataset.act === 'selShot') return;
   const A = b.dataset.act, v = b.dataset.v, sel = itemById(RT.sel), cam = camById(RT.cam);
   switch (A) {
     case 'env': ST.env = v; ST.light = ENVS[v].light; fitOrbit(); commit(); break;
-    case 'light': ST.light = v; commit(); break;
+    case 'light': ST.light = v; ST.lt = {}; commit(); break;
+    case 'ltReset': ST.lt = {}; commit(); break;
+    case 'icat': ITEMCAT = v; renderPanel(); break;
+    case 'threePt': {
+      const cur = itemById(RT.sel), h = cur && cur.kind !== 'prop' ? cur : ST.items.find(x => x.kind === 'human');
+      if (!h) { toast('أضف شخصية أولًا'); break; }
+      const f = (h.rot || 0) * D2R, put = (type, ang, dist, power, lc, name) => { const a = f + ang * D2R, x = +(h.x + Math.sin(a) * dist).toFixed(2), z = +(h.z + Math.cos(a) * dist).toFixed(2), s2 = newItemSpec(type, x, z, Math.round(Math.atan2(h.x - x, h.z - z) / D2R)); s2.id = nid('i'); s2.name = name; s2.power = power; s2.lc = lc; s2.aim = h.id; ST.items.push(s2); };
+      put('spot', -40, 2.8, 1.3, '#ffcf9a', 'الضوء الرئيسي'); put('softbox', 50, 2.4, .55, '#fff1dc', 'ضوء التعبئة'); put('spot', 165, 2.4, 1.1, '#dce9ff', 'الضوء الخلفي');
+      commit(); toast(`إضاءة ثلاثية حول «${h.name}»`); break;
+    }
     case 'weather': ST.weather = v; commit(); break;
     case 'showPath': if (sel) showPath(sel.id, +b.dataset.ai); break;
     case 'aspect': ST.aspect = v; commit(); break;
@@ -506,7 +548,7 @@ function onPanelInput(e) {
   if (el.dataset.f && el.dataset.s && el.type !== 'text' && el.tagName !== 'SELECT') {
     const o = scopeObj(el.dataset.s); if (!o) return; let v = el.value; if (el.type === 'range') v = +v; o[el.dataset.f] = v;
     const out = el.parentElement.querySelector('output'); if (out) out.textContent = outFmt(el.dataset.f, v);
-    if (el.dataset.s === 'item') syncItems(); if (el.dataset.s === 'cam') RT.src = o.id; RT.dirty = true;
+    if (el.dataset.s === 'item') syncItems(); if (el.dataset.s === 'cam') RT.src = o.id; if (el.dataset.s === 'lt') applyLight(); RT.dirty = true;
   }
 }
 function onPanelChange(e) {

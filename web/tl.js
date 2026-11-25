@@ -112,7 +112,7 @@ function bindTL() {
       }, moved => {
         RT.sel = s.id; RT.selAct = { id: s.id, ai }; RT.selShot = null; RT.ctxCam = null;
         if (moved) { RT.popFor = null; commit(); }
-        else { RT.popFor = { kind: 'act', id: s.id, ai }; renderTL(); renderCtx(); if (TAB === 'cast' || TAB === 'props') renderPanel(); RT.dirty = true; }
+        else { RT.popFor = { kind: 'act', id: s.id, ai }; renderTL(); renderCtx(); if (TAB === 'items') renderPanel(); RT.dirty = true; }
       });
       return;
     }
@@ -133,7 +133,7 @@ function bindTL() {
     const row = e.target.closest('.trow.trk');
     if (e.target.closest('.ruler') || e.pointerType === 'mouse') {
       e.preventDefault(); RT.t = tAt(e.clientX); RT.dirty = true; updPH(true);
-      dragEl(e, tin, x => { RT.t = tAt(x); RT.dirty = true; updPH(true); }, () => { if (row && row.dataset.item && RT.sel !== row.dataset.item) onSelectItem(row.dataset.item); else if (TAB === 'cast' || TAB === 'props') renderPanel(); });
+      dragEl(e, tin, x => { RT.t = tAt(x); RT.dirty = true; updPH(true); }, () => { if (row && row.dataset.item && RT.sel !== row.dataset.item) onSelectItem(row.dataset.item); else if (TAB === 'items') renderPanel(); });
     } else {
       const x0 = e.clientX, y0 = e.clientY;
       const up = ev => { tl.removeEventListener('pointercancel', cancel); if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) { RT.t = tAt(ev.clientX); RT.dirty = true; updPH(true); if (row && row.dataset.item && RT.sel !== row.dataset.item) onSelectItem(row.dataset.item); } };
@@ -276,9 +276,9 @@ function bindCtx() {
       case 'bigger': if (s.kind === 'human') s.h = clamp(s.h + 5, 50, 215); else s.scale = +clamp((s.scale || 1) * 1.12, .2, 6).toFixed(2); commit(); break;
       case 'act': RT.popFor = { kind: 'type', id: s.id, t: +RT.t.toFixed(1), anchor: 'ctx' }; reopenPop(); break;
       case 'dup': { const d = JSON.parse(JSON.stringify(s)); d.id = nid('i'); d.x += .9; d.name += ' 2'; d.actions = (d.actions || []).map(a => (a.tx != null ? Object.assign(a, { tx: a.tx + .9 }) : a)); ST.items.push(d); RT.sel = d.id; commit(); toast('نُسخ العنصر'); break; }
-      case 'edit': switchTab(s.kind === 'prop' ? 'props' : 'cast'); if (innerWidth < 900) $('#tabs').scrollIntoView({ behavior: 'smooth' }); break;
+      case 'edit': switchTab('items'); if (innerWidth < 900) $('#tabs').scrollIntoView({ behavior: 'smooth' }); break;
       case 'del': delItem(s.id); break;
-      case 'close': RT.sel = null; renderCtx(); renderTL(); if (TAB === 'cast' || TAB === 'props') renderPanel(); RT.dirty = true; break;
+      case 'close': RT.sel = null; renderCtx(); renderTL(); if (TAB === 'items') renderPanel(); RT.dirty = true; break;
     }
     else if (c) switch (k) {
       case 'cView': RT.src = c.id; RT.cam = c.id; setView('cam'); RT.dirty = true; break;

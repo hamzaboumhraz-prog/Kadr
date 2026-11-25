@@ -48,8 +48,9 @@ function openProject(P, idx) {
   PRJ = P; P.scenes = (P.scenes || []).filter(s => s && Array.isArray(s.items));
   if (!P.scenes.length) P.scenes.push(sceneOf(blankScene('studio'), 'المشهد 1'));
   P.scenes.forEach((S, i) => sceneOf(S, S.name || 'المشهد ' + (i + 1)));
+  if (P.lessons) TAB = 'learn'; else if (TAB === 'learn') TAB = 'scene';
   enterScene(clamp(idx == null ? (P.cur || 0) : idx, 0, P.scenes.length - 1));
-  hideHome(); writePrj(PRJ);
+  renderTabs(); renderPanel(); hideHome(); writePrj(PRJ);
 }
 function enterScene(i) {
   PRJ.cur = i; ST = normalize(PRJ.scenes[i]); PRJ.scenes[i] = ST;

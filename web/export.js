@@ -85,11 +85,15 @@ async function renderVideo(onP) {
   const fps = EXP.fps === 30 ? 30 : 24, film = EXP.film && PRJ && PRJ.scenes.length > 1, home = PRJ ? PRJ.cur : 0;
   const segs = film ? PRJ.scenes.map((S, i) => ({ i, n: Math.round(sceneDur(S) * fps) })).filter(g => g.n > 0) : [{ i: home, n: Math.max(1, Math.round(totalDur() * fps)) }];
   const N = segs.reduce((a, g) => a + g.n, 0); let curSeg = home;
-  const useScene = k => { if (!film || k === curSeg) return; ST = normalize(PRJ.scenes[k]); curSeg = k; setBackdrop(null); refreshWorld(); };
+  let pm2 = null, env2 = null;
+  const mkEnv2 = () => { if (!pm2) return; if (env2) env2.dispose(); env2 = pm2.fromScene(envScene, 0, .1, 100); scene.environment = env2.texture; r2.toneMappingExposure = renderer.toneMappingExposure; };
+  const useScene = k => { if (!film || k === curSeg) return; ST = normalize(PRJ.scenes[k]); curSeg = k; setBackdrop(null); refreshWorld(); mkEnv2(); };
   const at = i => { for (const g of segs) { if (i < g.n) return [g.i, i]; i -= g.n; } const g = segs[segs.length - 1]; return [g.i, g.n - 1]; };
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const r2 = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
   r2.setPixelRatio(1); r2.setSize(W, H, false); r2.shadowMap.enabled = true; r2.shadowMap.type = THREE.PCFSoftShadowMap;
+  r2.outputEncoding = THREE.sRGBEncoding; r2.toneMapping = THREE.ACESFilmicToneMapping; r2.toneMappingExposure = renderer.toneMappingExposure;
+  RT.exporting = true; pm2 = new THREE.PMREMGenerator(r2); mkEnv2();
   const comp = document.createElement('canvas'); comp.width = W; comp.height = H; const cx = comp.getContext('2d');
   const cam = new THREE.PerspectiveCamera(40, W / H, .02, 600), tick = () => new Promise(r => setTimeout(r, 0));
   const frame = i => { const [k, j] = at(i); useScene(k); drawExportFrame(r2, cam, cx, j / fps, W, H); };
@@ -129,7 +133,13 @@ async function renderVideo(onP) {
     }
     await new Promise(r => setTimeout(r, 1000 / fps + 60)); rec.stop(); await done;
     return { blob: new Blob(chunks, { type: mime.split(';')[0] }), ext: mime.includes('mp4') ? 'mp4' : 'webm', w: W, h: H };
-  } finally { r2.dispose(); try { r2.forceContextLoss(); } catch (e) { } if (film && curSeg !== home) { ST = PRJ.scenes[home]; refreshWorld(); loadBd(); } applyAll(RT.t); RT.dirty = true; }
+  } finally {
+    RT.exporting = false; if (env2) env2.dispose(); if (pm2) pm2.dispose();
+    r2.dispose(); try { r2.forceContextLoss(); } catch (e) { }
+    if (film && curSeg !== home) { ST = PRJ.scenes[home]; refreshWorld(); loadBd(); }
+    scene.environment = envRT ? envRT.texture : null; if (RT.envPending) { RT.envPending = false; rebuildEnv(); }
+    applyAll(RT.t); RT.dirty = true;
+  }
 }
 function blobB64(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(b); }); }
 function expName() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${PRJ ? fileSafe(PRJ.name).replace(/\s+/g, '-') : 'kadr'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${EXP.ext}`; }
