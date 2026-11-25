@@ -130,7 +130,7 @@ function syncEnv() {
   applyLight(); RT.dirty = true;
 }
 function applyLight() {
-  const L = lightOf(), wx = ST.weather || 'clear', inside = !!INDOOR[ST.env];
+  const L = lightOf(), wx = ST.weather || 'clear', inside = !!INDOOR[ST.env] || !!(isLib(ST.env) && LIB.items[ST.env.slice(4)] && LIB.items[ST.env.slice(4)].indoor);
   const top = L.sky.clone(), hz = L.hz.clone(), sunC = L.sc.clone();
   let si = L.si, hi = L.hi;
   if (wx === 'fog') { const f = new THREE.Color('#c9c9c4'); top.lerp(f, .75); hz.lerp(f, .85); hi *= .95; si *= .5; }
@@ -309,7 +309,7 @@ function poseHuman(o, st, t) {
     P.rShX = lerp(P.rShX, -.55, a2 * d); P.rShZ = lerp(P.rShZ, .55, a2 * d); P.rEl = lerp(P.rEl, .35, a2 * d);
     P.spine += .08 * Math.sin(st.fx * 5) * d; P.neckX += .12 * d; }
   setPose(o, P);
-  o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone'; if (o.hold.tphone) o.hold.tphone.visible = st.hold === 'tphone';
+  o.hold.binoc.visible = st.hold === 'binoc'; o.hold.phone.visible = st.hold === 'phone'; if (o.hold.tphone) o.hold.tphone.visible = st.hold === 'tphone'; if (o.hold.book) o.hold.book.visible = st.hold === 'book';
   const lip = st.line ? visemeOpen(st.line, st.lineP) : st.talk * (.5 + .5 * Math.sin(st.fx * 15)) * (.55 + .45 * Math.sin(st.fx * 5.3 + 1));
   const bl = st.hold === 'binoc' ? 0 : blinkAt(t, o.seed), open = Math.max(st.line ? lip * st.talk : lip, st.laugh * (.65 + .2 * Math.sin(st.fx * 18)), st.hold === null && P.lShX > 2 ? .5 : 0, st.dance * .35);
   r.eyes.forEach(e => { e.g.scale.y = 1 - .92 * bl; e.p.position.x = st.gazeX * r.r * .055; e.p.position.y = st.gazeY * r.r * .05; });
@@ -485,7 +485,7 @@ function baseCam(cfg, tS) {
     if (m === 'ots') {
       let ux = O.eye.x - S.eye.x, uz = O.eye.z - S.eye.z; const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
       const sg = (cfg.side || 0) >= 0 ? 1 : -1, px = -uz * sg, pz = ux * sg;
-      pos = V3(O.eye.x + ux * .5 * sc + px * .3 * sc, O.eye.y + .05 * sc, O.eye.z + uz * .5 * sc + pz * .3 * sc); R.shoulder = V3(px, 0, pz);
+      pos = V3(O.eye.x + ux * .85 * sc + px * .5 * sc, O.eye.y + .07 * sc, O.eye.z + uz * .85 * sc + pz * .5 * sc); R.shoulder = V3(px, 0, pz);
     } else pos = O.eye.clone().addScaledVector(O.fwd, .08 * sc);
     const eOff = { high: .45, low: -.4, bird: 1.6, worm: -.9 }[cfg.angle] || 0; pos.y = Math.max(.15, pos.y + eOff * sc);
     const tgt = V3(fr.cx, (fr.b + fr.t) / 2, fr.cz), v = pos.clone().sub(tgt), d = Math.max(.05, v.length());

@@ -62,7 +62,9 @@
 - حيوانات: `dog` `shaggy` `cat` `horse` `sheep` `bird` `camel` `donkey` `chicken`
 - أشياء: `tv` `sofa` `door` `table` `chair` `bed` `desk` `lamp` `shelf` `board` `box` `plant` `car` `suv` `stall` `fence` `hay` `tree` `palm` `rock` `bench` `streetlight` `wall` `ctable` `counter` `lantern` `parasol`
 
-خصائص اختيارية: `name`، `pose` (`stand` `sit` `lie` `text` `phone` `cross`…؛ للحيوانات `sit` و `lie`)، `color`، `scale`، ومظهر الأشخاص: `h` `hair` `hairC` `skin` `top` `bot` `btype` `outer` `outerC` `acc` (`["glasses","cap"]`).
+خصائص اختيارية: `name`، `pose` (`stand` `sit` `lie` `text` `phone` `cross` `read` يمسك كتابًا مفتوحًا ويقرأ، `lean` متّكئ…؛ للحيوانات `sit` و `lie`)، `color`، `scale`، ومظهر الأشخاص: `h` `hair` `hairC` `skin` `top` `bot` `btype` `outer` `outerC` `acc` (`["glasses","cap","backpack"]`) و`bagC` لون الحقيبة.
+
+أضواء التصوير `spot` `softbox` `bulb` تقبل: `power` (0…3)، `lc` لون الضوء، `angle` اتساع الحزمة بالدرجات، `tilt`، و`aim` اسم العنصر الذي يُوجَّه إليه الضوء.
 
 العنصر في `cast` يُستعمل في أي مشهد بـ `"id"` نفسه، ويمكن تغيير ملابسه في مشهد بعينه.
 
@@ -80,7 +82,7 @@
 | `lens` | بالمليمتر (اختياري) |
 | `dist` | مضاعف المسافة (1 عادي، أكبر = أوسع) |
 | `tilt` | تعديل ارتفاع الزاوية بالدرجات |
-| `free` | `{ "pos": [x,y,z], "look": [x,y,z] أو اسم عنصر, "lens": 35 }` |
+| `free` | `{ "pos": [x,y,z], "look": [x,y,z] أو اسم عنصر, "lens": 35 }` (وجوده يجعل الكاميرا حرة تلقائيًا) |
 | `dur` | المدة بالثواني |
 | `trans` | `cut` · `dissolve` · `fade` (الأولى: ظهور من السواد) |
 | `end` | `fade` = اختفاء تدريجي نحو السواد في آخر اللقطة |
@@ -94,8 +96,8 @@
 
 - التنقّل: `walk` `run` (`to`، `stop` مسافة التوقف قبل العنصر، `speed`: `slow`/`fast`، `back`: يمشي إلى الخلف)، `retreat` (يتراجع، `dist`)، `jump`، `turn` (`to` أو `v` بالدرجات)
 - الرأس والوجه: `look` (`v` بالدرجات، أو `to` عنصر فيصبح `watch`)، `watch` (يتابع عنصرًا بنظره طوال `dur`)، `eyes` (`left` `right` `up` `down` `center`)، `talk` `laugh` `nod` `shake`
-- اليدان والجسد: `browse` (يتصفح الهاتف) `phone` `dress` `wave` `gesture` `point` `clap` `cross` `shock` `armsup` `dance` `raise`
-- الوضعيات: `sit` `stand` `lie` (والحيوانات أيضًا) `bend`
+- اليدان والجسد: `browse` (يتصفح الهاتف) `read` (يقرأ كتابًا) `phone` `dress` `wave` `gesture` `point` `clap` `cross` `shock` `armsup` `dance` `raise`
+- الوضعيات: `sit` `stand` `lie` (والحيوانات أيضًا) `bend` `lean`
 
 إذا غابت `dur` تُحسب تلقائيًا (المشي من المسافة).
 
@@ -116,7 +118,7 @@
 | `kind` | `set` ديكور كامل · `prop` شيء · `animal` حيوان · `person` شخص |
 | `parts` | قائمة الأشكال (للديكور والشيء) |
 
-**الأشكال** (`parts`): كل شكل له `shape` و`at: [x, y, z]` بالأمتار (y = الارتفاع إلى مركز الشكل) و`rot: [x, y, z]` بالدرجات و`scale`، ومن المظهر: `color`، `tex` (`wood` `tile` `stone` `cobble` `terra` `carpet` `lino` `plaster`) مع `repeat: [x, y]`، `rough` (0 لامع ← 1 مطفأ)، `metal`، `glow` (يضيء ذاتيًا، مع `glowColor`)، `opacity`، `double`، `shadow: false`.
+**الأشكال** (`parts`): كل شكل له `shape` و`at: [x, y, z]` بالأمتار (y = الارتفاع إلى مركز الشكل) و`rot: [x, y, z]` بالدرجات و`scale`، ومن المظهر: `color`، `tex` (`wood` `tile` `stone` `cobble` `terra` `carpet` `lino` `plaster`، و`books` رفوف مليئة بالكتب: كل تكرار عمودي = رفّان، مع `seed` لتنويع الكتب) مع `repeat: [x, y]`، `tint` لتلوين النسيج، `rough` (0 لامع ← 1 مطفأ)، `metal`، `glow` (يضيء ذاتيًا، مع `glowColor`)، `opacity`، `double`، `shadow: false`.
 
 | `shape` | المقاسات |
 |---|---|
@@ -133,9 +135,10 @@
 
 - `repeatAt: [[x,y,z], ...]` يكرر الشكل نفسه في عدة أماكن (أعمدة، أشجار، كراسٍ).
 - `{ "light": true, "at": [x,y,z], "color": "#ffb15c", "dist": 7 }` مصباح حقيقي يضيء المحيط ليلًا ويخفت نهارًا.
-- في الديكور: الجدران (صناديق عالية رقيقة، أو أي شكل عليه `"wall": true`) تُرفع تلقائيًا حين تكون الكاميرا خلفها، مثل الجدران المتحركة في استوديو التصوير، وتبقى ظلالها. `"wall": false` يمنع ذلك.
+- في الديكور: الجدران (صناديق عالية رقيقة، أو أي شكل عليه `"wall": true`) تُرفع تلقائيًا حين تكون الكاميرا خلفها، مثل الجدران المتحركة في استوديو التصوير، وتبقى ظلالها. `"wall": false` يمنع ذلك، و`"wall": "x"` أو `"z"` يحدد اتجاه وجه الجدار (للرفوف وقطعها الصغيرة كي تُرفع معًا).
+- `"roof": true` سقف يختفي حين تكون الكاميرا فوقه وفي المخطط 2D، ويبقى ظله. `"plan": false` يُخفي القطعة في المخطط فقط (مصابيح معلقة، أسلاك).
 
-**الديكور** (`set`) يضيف: `floor: { size: [w, d], color, tex, repeat, outerColor }`، `light` (الإضاءة الافتراضية: `day` `night` `golden` ...)، `sky` (لون مربعه في القائمة)، `r` (نصف قطر منطقة اللعب)، `start: [x, z]` (حيث يقف الممثلون في مشهد جديد).
+**الديكور** (`set`) يضيف: `indoor: true` للأماكن المغلقة، `floor: { size: [w, d], color, tex, repeat, outerColor }`، `light` (الإضاءة الافتراضية: `day` `night` `golden` ...)، `sky` (لون مربعه في القائمة)، `r` (نصف قطر منطقة اللعب)، `start: [x, z]` (حيث يقف الممثلون في مشهد جديد).
 
 **الحيوان** (`animal`): `animal: { "base": "dog" | "cat" | "horse" | "sheep" | "camel" | "donkey", ...تعديلات }` حيث `L` طول الجسم، `R` سُمكه، `leg` طول القوائم، `hr` حجم الرأس، `neck` طول الرقبة، `snout` الخطم، `tail` الذيل، `horns` (طول القرنين)، `hornC`، `beard`، `wool`، `hump`، `longEars`. اللون من `color`.
 
@@ -144,5 +147,7 @@
 ## النماذج ثلاثية الأبعاد (`.glb`)
 
 يقبل كادر أيضًا نماذج `.glb` (من Blender أو مواقع النماذج المجانية مثل Sketchfab وPoly Pizza وMixamo). عند الاستيراد تختار: الاسم، النوع (شيء، حيوان، شخص)، الارتفاع بالمتر، واتجاه الوجه. إذا كان في النموذج حركات مسماة `walk` أو `run` أو `idle` فكادر يشغلها تلقائيًا حين يمشي العنصر أو يركض أو يقف، بإيقاع خطواته.
+
+ملف السيناريو نفسه يمكن أن يحمل `"assets": [...]` فيُثبَّت الديكور ثم يُبنى المشهد فيه بخطوة واحدة: [`examples/bookstore-scene.kadr`](examples/bookstore-scene.kadr) (مكتبة لبيع الكتب، شخصيتان، خمس لقطات).
 
 مثال كامل: [`examples/riad-pack.kadr`](examples/riad-pack.kadr) (رياض مغربي بنافورة وأروقة وأشجار برتقال، صينية شاي، عربة خضر، ماعز، حارس الرياض).

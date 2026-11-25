@@ -82,11 +82,13 @@ const POSES = {
   shock: { lShX: 2.25, lShZ: .55, lEl: 2.05, rShX: 2.25, rShZ: .55, rEl: 2.05, neckX: .08 },
   armsup: { lShX: .25, lShZ: 2.75, lEl: .2, rShX: .25, rShZ: 2.75, rEl: .2, neckX: -.12 },
   bend: { spine: 1.05, lHipX: .35, rHipX: .35, lKnee: .6, rKnee: .6, hipY: -.15, lShX: 1.0, rShX: 1.0, lEl: .2, rEl: .2, neckX: -.35 },
-  text: { rShX: .5, rShZ: .12, rEl: 1.55, lShX: .38, lShZ: -.02, lEl: 1.45, neckX: .42 }
+  text: { rShX: .5, rShZ: .12, rEl: 1.55, lShX: .38, lShZ: -.02, lEl: 1.45, neckX: .42 },
+  read: { rShX: .42, rShZ: .16, rEl: 1.3, lShX: .42, lShZ: .16, lEl: 1.3, neckX: .5, spine: .06 },
+  lean: { spine: -.1, lShX: .18, lShZ: -.12, lEl: .55, rShX: .18, rShZ: -.12, rEl: .55, rHipX: .18, rKnee: .32, neckX: -.04 }
 };
 for (const k in POSES) POSES[k] = Object.assign({}, POSE0, POSES[k]);
-const POSE_AR = { stand: 'واقف', sit: 'جالس', lie: 'مستلقٍ', binoc: 'يمسك منظارًا', phone: 'على الهاتف', text: 'ينظر في هاتفه', point: 'يشير', cross: 'مكتوف اليدين', shock: 'يداه على رأسه', armsup: 'يرفع يديه' };
-const POSE_HOLD = { binoc: 'binoc', phone: 'phone', text: 'tphone' };
+const POSE_AR = { stand: 'واقف', sit: 'جالس', lie: 'مستلقٍ', binoc: 'يمسك منظارًا', phone: 'على الهاتف', text: 'ينظر في هاتفه', point: 'يشير', cross: 'مكتوف اليدين', shock: 'يداه على رأسه', armsup: 'يرفع يديه', read: 'يقرأ كتابًا', lean: 'متّكئ' };
+const POSE_HOLD = { binoc: 'binoc', phone: 'phone', text: 'tphone', read: 'book' };
 
 const ACT_GROUPS = [['move', 'التنقّل'], ['face', 'الرأس والوجه'], ['body', 'اليدان والجسد'], ['pose', 'الوضعيات']];
 const ACTS = {
@@ -108,6 +110,8 @@ const ACTS = {
   raise: { ar: 'يرفع المنظار', who: 'human', g: 'body', pose: 'binoc' },
   phone: { ar: 'يردّ على الهاتف', who: 'human', g: 'body', pose: 'phone' },
   browse: { ar: 'يتصفح هاتفه', who: 'human', g: 'body', pose: 'text' },
+  read: { ar: 'يقرأ كتابًا', who: 'human', g: 'body', pose: 'read' },
+  lean: { ar: 'يتّكئ', who: 'human', g: 'pose', pose: 'lean' },
   dress: { ar: 'يرتدي ملابسه', who: 'human', g: 'body' },
   cross: { ar: 'يكتف يديه', who: 'human', g: 'body', pose: 'cross' },
   shock: { ar: 'يضع يديه على رأسه', who: 'human', g: 'body', pose: 'shock' },
@@ -118,7 +122,7 @@ const ACTS = {
   lie: { ar: 'يستلقي أو ينام', who: 'living', g: 'pose', pose: 'lie' },
   stand: { ar: 'يقف / يعود', who: 'living', g: 'pose', pose: 'stand' }
 };
-const ACT_DUR = { watch: 2.5, browse: 1, dress: 2.4, walk: 2, run: 1.5, jump: .8, turn: .8, look: .6, eyes: .4, talk: 2.4, laugh: 1.6, nod: 1, shake: 1, wave: 1.6, gesture: 2.4, point: .8, clap: 1.6, raise: 1.2, phone: 1, cross: .8, shock: .7, armsup: .7, dance: 3, sit: 1.2, bend: 1.6, lie: 1.4, stand: 1 };
+const ACT_DUR = { watch: 2.5, browse: 1, read: 1, lean: 1, dress: 2.4, walk: 2, run: 1.5, jump: .8, turn: .8, look: .6, eyes: .4, talk: 2.4, laugh: 1.6, nod: 1, shake: 1, wave: 1.6, gesture: 2.4, point: .8, clap: 1.6, raise: 1.2, phone: 1, cross: .8, shock: .7, armsup: .7, dance: 3, sit: 1.2, bend: 1.6, lie: 1.4, stand: 1 };
 
 const CAST = {
   man: { ar: 'رجل', age: 'adult', h: 176, build: 1, skin: '#c99a74', hair: 'short', hairC: '#2b1d14', top: '#ece5d6', bot: '#44502f', btype: 'pants', sleeves: 0, acc: {} },

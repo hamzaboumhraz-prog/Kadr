@@ -59,7 +59,8 @@ const AL = {
     browse: ['browse', 'text', 'scroll', 'phone browse', 'look at phone', 'use phone', 'يتصفح'], dress: ['dress', 'wear', 'put on', 'get dressed', 'يرتدي', 'يلبس'], cross: ['cross', 'cross arms', 'يكتف'],
     shock: ['shock', 'surprise', 'surprised', 'startle', 'يتفاجأ'], armsup: ['armsup', 'arms up', 'raise arms'], dance: ['dance', 'يرقص'], sit: ['sit', 'sits', 'sit down', 'يجلس'],
     bend: ['bend', 'pick up', 'crouch', 'ينحني'], lie: ['lie', 'lie down', 'sleep', 'sleeps', 'nap', 'ينام', 'يستلقي'], stand: ['stand', 'stand up', 'get up', 'rise', 'wake', 'ينهض', 'يقف'],
-    retreat: ['retreat', 'step back', 'back off', 'recoil', 'back away', 'يتراجع']
+    retreat: ['retreat', 'step back', 'back off', 'recoil', 'back away', 'يتراجع'],
+    read: ['read', 'reads', 'book', 'read book', 'يقرأ'], lean: ['lean', 'leans', 'lean on', 'lean against', 'يتكئ', 'تتكئ']
   }),
   type: aliasMap({
     youngman: ['youngman', 'young man', 'young', 'shab', 'شاب'], youngwoman: ['youngwoman', 'young woman', 'شابة'], man: ['man', 'رجل'], woman: ['woman', 'امراة'], hijabi: ['hijabi', 'veiled woman', 'امراة بحجاب'],
@@ -92,7 +93,7 @@ function buildFromScript(J) {
   function buildScene(SC, si) {
     const tag = `المشهد ${si + 1}`;
     const pl = SC.place || SC.env || SC.location;
-    let env = ENVS[pl] ? pl : (window.LIB && pl && LIB.items[libId(pl)] && LIB.items[libId(pl)].kind === 'set') ? 'lib:' + libId(pl) : AL.env[nk(pl)] || null;
+    let env = ENVS[pl] ? pl : (typeof LIB !== 'undefined' && pl && LIB.items[libId(pl)] && LIB.items[libId(pl)].kind === 'set') ? 'lib:' + libId(pl) : AL.env[nk(pl)] || null;
     if (!env) { if (SC.place) W(`${tag}: مكان غير معروف «${SC.place}» فاستُعمل الاستوديو`); env = 'studio'; }
     const light = AL.light[nk(SC.light)] || (LIGHTS[SC.light] ? SC.light : ENVS[env].light);
     const S = { v: 1, seq: 1, env, light, weather: WEATHER[SC.weather] ? SC.weather : 'clear', aspect: String(SC.aspect || aspect), items: [], cams: [], shots: [], bd: null, ov: { thirds: 1, safe: 0, lbl: 1 }, lesson: null, goal: SC.goal || '' };
@@ -103,20 +104,22 @@ function buildFromScript(J) {
     itemsIn.forEach((d, k) => {
       if (!d) return;
       const key = String(d.id || d.ref || d.type || 'item' + k), base = castDefs[d.ref || d.id] || {}, spec = Object.assign({}, base, d);
-      let type = spec.type || spec.kind; type = (CAST[type] || ANIMALS[type] || PROPS[type]) ? type : (window.LIB && type && LIB.items[libId(type)]) ? 'lib:' + libId(type) : AL.type[nk(type)];
+      let type = spec.type || spec.kind; type = (CAST[type] || ANIMALS[type] || PROPS[type]) ? type : (typeof LIB !== 'undefined' && type && LIB.items[libId(type)]) ? 'lib:' + libId(type) : AL.type[nk(type)];
       if (!type) { W(`${tag}: نوع غير معروف «${spec.type || key}» فوُضع صندوق مكانه`); type = 'box'; }
       const at = Array.isArray(spec.at) ? spec.at : [0, 0];
       const it = newItemSpec(type, +at[0] || 0, +at[1] || 0, 0);
       it.id = nid('i'); if (spec.name) it.name = String(spec.name);
       if (it.kind === 'human') {
-        ['h', 'build', 'skin', 'hair', 'hairC', 'top', 'bot', 'btype', 'sleeves', 'outer', 'outerC', 'age'].forEach(f => { if (spec[f] != null) it[f] = spec[f]; });
+        ['h', 'build', 'skin', 'hair', 'hairC', 'top', 'bot', 'btype', 'sleeves', 'outer', 'outerC', 'age', 'bagC'].forEach(f => { if (spec[f] != null) it[f] = spec[f]; });
         if (spec.acc) { it.acc = Object.assign({}, it.acc || {}); if (Array.isArray(spec.acc)) spec.acc.forEach(a => { if (ACCS[a]) it.acc[a] = 1; }); else Object.keys(spec.acc).forEach(a => { if (ACCS[a]) it.acc[a] = spec.acc[a] ? 1 : 0; }); }
-      } else { if (spec.color) it.color = spec.color; if (spec.scale) it.scale = clamp(+spec.scale || 1, .2, 6); }
+      } else { if (spec.color) it.color = spec.color; if (spec.scale) it.scale = clamp(+spec.scale || 1, .2, 6);
+        if (PROPS[type] && PROPS[type].light) { if (spec.power != null) it.power = clamp(+spec.power || 0, 0, 3); if (spec.lc) it.lc = String(spec.lc); if (spec.angle != null) it.angle = +spec.angle; if (spec.tilt != null) it.tilt = +spec.tilt; } }
       const pose = spec.pose && (POSES[spec.pose] ? spec.pose : AL.act[nk(spec.pose)]);
       if (pose === 'browse') it.pose = 'text'; else if (pose && (POSES[pose] || (it.kind === 'animal' && (pose === 'sit' || pose === 'lie')))) it.pose = pose === 'lie' && it.kind !== 'human' ? 'lie' : pose;
       S.items.push(it); ids[key] = it.id; specs[key] = spec;
     });
     const idOf = v => v == null ? null : ids[String(v)] || null;
+    Object.keys(specs).forEach(key => { const a = specs[key].aim, s = itemById(ids[key]); if (a != null && s && PROPS[s.type] && PROPS[s.type].light) { const t = idOf(a); if (t) s.aim = t; else W(`${tag}: الضوء «${key}» موجَّه إلى عنصر غير موجود: ${a}`); } });
     const ptOf = (v, t) => { if (Array.isArray(v)) return { x: +v[0] || 0, z: +v[1] || 0 }; const id = idOf(v), s = id && itemById(id); if (!s) return null; const e = evalItem(s, t || 0, true); return { x: e.x, z: e.z, s }; };
     const angTo = (from, P) => Math.atan2(P.x - from.x, P.z - from.z) / D2R;
     Object.keys(specs).forEach(key => {
@@ -137,7 +140,7 @@ function buildFromScript(J) {
       if (ang === 'hi1') { ang = 'high'; eAdj -= 14; } if (ang === 'lo1') { ang = 'low'; eAdj += 10; }
       if (!ang) { if (SH.angle) W(`${stag}: زاوية غير معروفة «${SH.angle}»`); ang = 'eye'; }
       let side = typeof SH.side === 'number' ? SH.side : SH.side != null && !isNaN(+SH.side) ? +SH.side : AL.side[nk(SH.side)]; side = side == null ? 0 : +side;
-      let view = AL.view[nk(SH.view || SH.framing || SH.mode)] || 'single';
+      let view = SH.free && !SH.view ? 'free' : AL.view[nk(SH.view || SH.framing || SH.mode)] || 'single';
       const onId = idOf(SH.on || SH.subject || SH.target) || (view === 'free' ? null : (firstHuman() || {}).id), wId = idOf(SH.with || SH.other || SH.from);
       if ((SH.on || SH.subject) && !idOf(SH.on || SH.subject)) W(`${stag}: الهدف «${SH.on || SH.subject}» غير موجود`);
       if ((view === 'ots' || view === 'pov' || view === 'pair') && !wId) { W(`${stag}: «${view}» يحتاج شخصية ثانية (with) فصارت فردية`); view = 'single'; }

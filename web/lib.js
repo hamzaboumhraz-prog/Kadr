@@ -28,9 +28,14 @@ function libRegister() {
   });
 }
 /* ---------- building from shapes ---------- */
+const TXC = {};
 function libTex(p) {
-  const c = p.color || '#999', rx = p.repeat ? p.repeat[0] : 1, ry = p.repeat ? p.repeat[1] : 1;
+  const c = p.color || '#999', rx = p.repeat ? +p.repeat[0] || 1 : 1, ry = p.repeat ? +p.repeat[1] || 1 : 1, key = [p.tex, c, rx, ry, p.seed || 0].join('|');
+  return TXC[key] || (TXC[key] = libTex0(p, c, rx, ry));
+}
+function libTex0(p, c, rx, ry) {
   switch (p.tex) {
+    case 'books': return TX.books(rx, ry, p.seed);
     case 'wood': return TX.wood(rx, ry); case 'tile': return TX.tile(rx, ry); case 'carpet': return TX.carpet(); case 'stone': return TX.stone(rx, ry);
     case 'cobble': return TX.cobble(rx, ry); case 'terra': return TX.terra(rx, ry); case 'lino': return TX.lino(rx, ry);
     case 'plaster': case 'noise': default: return TX.noise(c, [shade(c, .86), shade(c, 1.1)], p.tex === 'plaster' ? .22 : .32, rx, ry);
@@ -40,7 +45,7 @@ function libMat(p) {
   const o = { roughness: p.rough != null ? p.rough : .85, metalness: p.metal || 0 };
   if (p.double) o.side = THREE.DoubleSide; if (p.opacity != null && p.opacity < 1) { o.transparent = true; o.opacity = p.opacity; }
   if (p.glow) { o.emissive = new THREE.Color(p.glowColor || p.color || '#ffd9a0'); o.emissiveIntensity = p.glow; }
-  if (p.tex) return tmat(libTex(p), o);
+  if (p.tex) { if (p.tint) o.color = new THREE.Color(p.tint); return tmat(libTex(p), o); }
   return p.glow || o.transparent ? new THREE.MeshStandardMaterial(Object.assign({ color: p.color || '#999' }, o)) : mat(p.color || '#999', o);
 }
 function libGeo(p) {
@@ -69,9 +74,10 @@ function libParts(parts, g, lamps, cuts) {
     m.position.set(+at2[0] || 0, +at2[1] || 0, +at2[2] || 0); m.rotation.set((+r[0] || 0) * D2R, (+r[1] || 0) * D2R, (+r[2] || 0) * D2R);
     if (sc) Array.isArray(sc) ? m.scale.set(+sc[0] || 1, +sc[1] || 1, +sc[2] || 1) : m.scale.setScalar(+sc || 1);
     m.castShadow = p.shadow !== false; m.receiveShadow = true; g.add(m);
-    if (cuts && p.wall !== false) { const s = p.size || [], sx = +s[0] || 0, sy = +s[1] || 0, sz = +s[2] || 0, thin = Math.min(sx, sz), long = Math.max(sx, sz);
-      if (p.wall === true || (p.shape === 'box' && sy >= 1.8 && thin <= .6 && long >= 1.5)) {
-        const ry = (+r[1] || 0) * D2R, ax = sx <= sz ? 1 : 0, az = 1 - ax; let nx = ax * Math.cos(ry) + az * Math.sin(ry), nz = -ax * Math.sin(ry) + az * Math.cos(ry);
+    if (cuts && (p.roof || p.plan === false)) { m.userData.roofY = p.roof ? (+at2[1] || 0) - .05 : null; cuts.push(m); }
+    else if (cuts && p.wall !== false) { const s = p.size || [], sx = +s[0] || 0, sy = +s[1] || 0, sz = +s[2] || 0, thin = Math.min(sx, sz), long = Math.max(sx, sz);
+      if (p.wall === true || p.wall === 'x' || p.wall === 'z' || (p.shape === 'box' && sy >= 1.8 && thin <= .6 && long >= 1.5)) {
+        const ry = (+r[1] || 0) * D2R, ax = p.wall === 'x' ? 1 : p.wall === 'z' ? 0 : sx <= sz ? 1 : 0, az = 1 - ax; let nx = ax * Math.cos(ry) + az * Math.sin(ry), nz = -ax * Math.sin(ry) + az * Math.cos(ry);
         const cx = m.position.x, cz = m.position.z; if (Math.hypot(cx, cz) > .3) { if (nx * -cx + nz * -cz < 0) { nx = -nx; nz = -nz; } m.userData.cut = { x: cx, z: cz, nx, nz }; cuts.push(m); } } }
   });
   return g;
@@ -93,8 +99,8 @@ function libSet(key, lamps) {
 /* walls between the camera and the set are lifted out, like the wild walls of a studio set; they still cast shadows */
 let CUTS = []; const GHOST = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 function cutWalls(cam) {
-  if (!CUTS.length) return; const p = cam && !cam.isOrthographicCamera ? cam.position : null;
-  for (const m of CUTS) { const c = m.userData.cut, out = p && (p.x - c.x) * c.nx + (p.z - c.z) * c.nz < -.05;
+  if (!CUTS.length) return; const ortho = !!(cam && cam.isOrthographicCamera), p = cam && !ortho ? cam.position : null;
+  for (const m of CUTS) { const u = m.userData, c = u.cut, out = c ? p && (p.x - c.x) * c.nx + (p.z - c.z) * c.nz < -.05 : ortho || (u.roofY != null && p && p.y > u.roofY);
     if (out) { if (m.material !== GHOST) { m.userData.mat0 = m.material; m.material = GHOST; } } else if (m.userData.mat0) { m.material = m.userData.mat0; m.userData.mat0 = null; } }
 }
 /* ---------- 3D models (.glb) ---------- */

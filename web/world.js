@@ -94,6 +94,27 @@ const TX = {
   }),
   gallery: () => ctex(64, 128, (g, w, h) => { g.fillStyle = '#f4f4f0'; g.fillRect(0, 0, w, h); const c = ['#8a5a3a', '#d9c8a8', '#3a3430', '#b07a4a', '#e8dcc8', '#6e6a66']; for (let i = 0; i < 6; i++) { g.fillStyle = '#cfe0ee'; g.fillRect(4 + (i % 2) * 30, 14 + Math.floor(i / 2) * 36, 26, 32); g.fillStyle = c[i]; g.beginPath(); g.ellipse(17 + (i % 2) * 30, 34 + Math.floor(i / 2) * 36, 9, 7, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(22 + (i % 2) * 30, 25 + Math.floor(i / 2) * 36, 5, 0, TAU); g.fill(); } g.fillStyle = '#4285f4'; g.fillRect(4, 3, w - 8, 7); }),
   sign: (txt, bg, fg) => ctex(512, 128, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16); g.fillStyle = fg; g.font = 'bold 70px "Noto Kufi Arabic", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.direction = 'rtl'; g.fillText(txt, w / 2, h / 2 + 4); }),
+  /* shelves full of books: two rows per tile, each row standing on a plank */
+  books: (rx, ry, seed) => { const s0 = SEED; SEED = seed || 7; const t = ctex(512, 512, (g, w, h) => {
+    const pal = ['#7a2a2a', '#9b3b2e', '#c4703f', '#d9b36a', '#e8e0c8', '#2f4f6f', '#3d6b8a', '#24405a', '#4f6b3a', '#6a7a4a', '#5a3a5a', '#8a6a4a', '#2a2a2a', '#b5523b', '#efe9dc', '#1f3a4a'];
+    g.fillStyle = '#21140d'; g.fillRect(0, 0, w, h);
+    for (let r = 0; r < 2; r++) {
+      const y0 = r * h / 2, rh = h / 2, base = y0 + rh * .9; let x = 4;
+      g.fillStyle = '#140b07'; g.fillRect(0, y0, w, rh * .9);
+      while (x < w - 4) {
+        if (rnd() < .05) { x += 10 + rnd() * 26; continue; }
+        const bw = 7 + rnd() * 13, bh = rh * (.6 + rnd() * .26), c = pal[(rnd() * pal.length) | 0], lean = rnd() < .04;
+        g.save(); g.translate(x, base); if (lean) g.rotate(-.12);
+        g.fillStyle = c; g.fillRect(0, -bh, bw, bh);
+        g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, -bh, bw * .28, bh);
+        g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(bw - 1.5, -bh, 1.5, bh);
+        if (rnd() < .6) { g.fillStyle = rnd() < .5 ? 'rgba(235,215,160,.75)' : 'rgba(20,15,10,.45)'; g.fillRect(1.5, -bh * (.75 + rnd() * .1), bw - 3, bh * .07); g.fillRect(1.5, -bh * .22, bw - 3, bh * .04); }
+        g.restore(); x += bw + (rnd() < .2 ? 1 : 0);
+      }
+      const pg = g.createLinearGradient(0, base, 0, y0 + rh); pg.addColorStop(0, '#5a3a24'); pg.addColorStop(1, '#2a180e');
+      g.fillStyle = pg; g.fillRect(0, base, w, rh * .1); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, y0, w, rh * .05);
+    }
+  }, rx, ry); SEED = s0; return t; },
   lino: (rx, ry) => ctex(256, 256, (g, w, h) => {
     g.fillStyle = '#cfc6b2'; g.fillRect(0, 0, w, h); speckle(g, w, h, 1500, ['#a89f8b', '#e8e1d0'], .25);
     g.strokeStyle = 'rgba(80,70,55,.25)'; g.lineWidth = 2; g.strokeRect(0, 0, w, h);
@@ -349,7 +370,11 @@ function makeHuman(s) {
     [-1, 1].forEach(k => { const l = bx(sh * .2, tl * .3, .012, shade(oc, .82), k * sh * .2 * bw, tl * .7, fz + .006, MCLOTH); l.rotation.set(-.2, 0, k * .35); spine.add(l); }); }
   if (s.btype === 'pants' && !(outer === 'coat')) { const belt = msh(new THREE.TorusGeometry(hw * 1.55, .012, 6, 24), '#2a211c', { roughness: .5 }); belt.rotation.x = Math.PI / 2; belt.position.y = tl * .08; belt.scale.set(bw, 1, .7); spine.add(belt); }
   if (acc.tie) { const t = bx(sh * .13, tl * .36, .014, '#7a1f24', 0, tl * .64, fz + .012, MCLOTH); t.rotation.x = -.2; spine.add(t); }
-  if (acc.backpack) { spine.add(bx(sh * 1.15 * bw, tl * .55, sh * .55, '#2f6f5f', 0, tl * .5, -fz - sh * .25, MCLOTH)); spine.add(bx(sh * .9 * bw, tl * .2, sh * .2, '#245446', 0, tl * .32, -fz - sh * .55, MCLOTH)); }
+  if (acc.backpack) { const bc = s.bagC || '#2f6f5f'; spine.add(bx(sh * 1.15 * bw, tl * .55, sh * .55, bc, 0, tl * .5, -fz - sh * .25, MCLOTH)); spine.add(bx(sh * .9 * bw, tl * .2, sh * .2, shade(bc, .8), 0, tl * .32, -fz - sh * .55, MCLOTH));
+    [-1, 1].forEach(k => { const st = bx(sh * .1, tl * .62, .012, shade(bc, .7), k * sh * .42 * bw, tl * .52, fz * .55, MCLOTH); st.rotation.x = .1; spine.add(st); }); }
+  /* an open book held at the waist (pose «read») */
+  const book = G(); [-1, 1].forEach(k => { const hb = G(); hb.rotation.y = k * .22; hb.add(bx(.15, .22, .012, '#efe6d0', k * .075, 0, 0, { roughness: .9 })); hb.add(bx(.155, .225, .006, '#6e2a24', k * .077, 0, .009, { roughness: .6 })); book.add(hb); });
+  book.position.set(0, tl * .3, fz + .26); book.rotation.x = 1.05; book.visible = false; spine.add(book);
   const neck = at(G(), 0, tl * .86, 0); spine.add(neck);
   neck.add(lathe([[r * .46, -.02], [r * .4, P.neck * .4], [r * .38, P.neck + .02], [.001, P.neck + .04]], sk, MSKIN, 16));
   const head = at(G(), 0, P.neck, 0); neck.add(head);
@@ -447,7 +472,7 @@ function makeHuman(s) {
   mark(spine, 'chest', 0, tl * .62, 0); mark(pelvis, 'hip', 0, 0, 0); mark(RL.kn, 'knee', 0, 0, 0); mark(R.hand, 'hand', 0, 0, 0);
   root.scale.setScalar(sc);
   let seed = 0; for (const ch2 of String(s.id || s.name || 'x')) seed = (seed * 31 + ch2.charCodeAt(0)) % 997;
-  return { root, kind: 'human', sc, seed, elder: s.age === 'elder', rig: { body, pelvis, spine, neck, head, lSh: L.sh, rSh: R.sh, lEl: L.el, rEl: R.el, lHip: LL.hp, rHip: RL.hp, lKnee: LL.kn, rKnee: RL.kn, P, hipH, eyes, brows, mouth, lipLo, r }, mk, hold: { binoc, phone, tphone } };
+  return { root, kind: 'human', sc, seed, elder: s.age === 'elder', rig: { body, pelvis, spine, neck, head, lSh: L.sh, rSh: R.sh, lEl: L.el, rEl: R.el, lHip: LL.hp, rHip: RL.hp, lKnee: LL.kn, rKnee: RL.kn, P, hipH, eyes, brows, mouth, lipLo, r }, mk, hold: { binoc, phone, tphone, book } };
 }
 
 /* ---------- animals ---------- */
